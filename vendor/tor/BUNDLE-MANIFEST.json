@@ -1,0 +1,6 @@
+{
+  "source": "https://archive.torproject.org/tor-package-archive/torbrowser/15.0.20/tor-expert-bundle-windows-x86_64-15.0.20.tar.gz",
+  "bundleVersion": "15.0.20",
+  "torVersion": "0.4.9.11",
+  "sha256": "D59BFF934E3AD876E1623E24AE60C19AEEA56F50178093B9F86FBA230639F949"
+}

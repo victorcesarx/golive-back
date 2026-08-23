@@ -1,0 +1,59 @@
+{
+  "name": "goliveback",
+  "version": "0.15.0",
+  "private": true,
+  "type": "module",
+  "description": "Restaura Go Live e câmera no Discord por uma rota externa, sem injeção",
+  "author": "GoLiveBack contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/victorcesarx/golive-back.git"
+  },
+  "bugs": "https://github.com/victorcesarx/golive-back/issues",
+  "homepage": "https://github.com/victorcesarx/golive-back#readme",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "pnpm build && electron .",
+    "start": "electron .",
+    "test": "pnpm build && node --test dist/**/*.test.js",
+    "package:win": "pnpm build && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0",
+    "typescript": "^5.9.0"
+  },
+  "build": {
+    "appId": "app.goliveback.desktop",
+    "productName": "GoLiveBack",
+    "artifactName": "GoLiveBack-${version}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "public/**",
+      "assets/**",
+      "README.md",
+      "THIRD_PARTY_NOTICES.md",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/tor",
+        "to": "tor"
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "assets/app-icon.ico"
+    }
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ]
+  }
+}

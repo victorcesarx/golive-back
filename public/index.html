@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <title>GoLiveBack</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --primary-300: #9da8ff; --primary-500: #6673e8; --primary-600: #5662d4; --primary-700: #4651b9;
+        --bg-canvas: #17181c; --bg-content: #282a31; --bg-elevated: #30333b; --bg-hover: #383b44;
+        --border-subtle: #353841; --border-strong: #4a4e59;
+        --text-primary: #f2f3f5; --text-secondary: #b7bbc5; --text-muted: #858a96; --text-disabled: #616671;
+        --success: #35c987; --warning: #f0b84b; --danger: #e85a68;
+        --neutral-surface: rgb(133 138 150 / 14%); --neutral-state-border: rgb(133 138 150 / 30%);
+        --success-surface: rgb(53 201 135 / 14%); --success-state-border: rgb(53 201 135 / 42%);
+        --warning-surface: rgb(240 184 75 / 14%); --warning-state-border: rgb(240 184 75 / 42%);
+        --danger-surface: rgb(232 90 104 / 14%); --danger-state-border: rgb(232 90 104 / 42%);
+        --font-ui: Inter, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+        --font-mono: "JetBrains Mono", "Cascadia Code", monospace;
+        --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-pill: 999px;
+        --focus-ring: 0 0 0 3px rgb(102 115 232 / 30%); --duration-fast: 100ms; --duration-normal: 160ms;
+      }
+      [data-theme="light"] {
+        color-scheme: light; --bg-canvas: #e8eaf0; --bg-content: #fff; --bg-elevated: #f6f7f9; --bg-hover: #eceef3;
+        --border-subtle: #e0e3e9; --border-strong: #c8ccd5; --text-primary: #202228; --text-secondary: #50545e;
+        --text-muted: #777c87; --text-disabled: #a7abb4; --success: #177a55; --warning: #8b5a08; --danger: #b83246;
+        --neutral-surface: #eceef3; --neutral-state-border: #d3d7df;
+        --success-surface: #d8f2e5; --success-state-border: #8ac9ad;
+        --warning-surface: #fff0cc; --warning-state-border: #dfbd70;
+        --danger-surface: #fbe1e5; --danger-state-border: #dfa0aa;
+      }
+      * { box-sizing: border-box; }
+      html { min-height: 100%; overflow-y: auto; }
+      body { min-height: 100%; margin: 0; padding-top: 46px; background: var(--bg-canvas); color: var(--text-primary); font-family: var(--font-ui); font-size: 14px; line-height: 20px; }
+      ::-webkit-scrollbar { width: 0; height: 0; }
+      button, input, select { font: inherit; }
+      button, summary, input, select { transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast), transform var(--duration-fast); }
+      :focus-visible { outline: 2px solid var(--primary-300); outline-offset: 2px; box-shadow: var(--focus-ring); }
+      .titlebar { position: fixed; z-index: 20; inset: 0 0 auto 0; height: 46px; display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: var(--bg-canvas); -webkit-app-region: drag; }
+      .window-actions { display: flex; gap: 2px; -webkit-app-region: no-drag; }
+      .window-button { width: 38px; height: 32px; display: grid; place-items: center; border: 0; border-radius: var(--radius-sm); color: var(--text-muted); background: transparent; cursor: pointer; }
+      .window-button:hover { color: var(--text-primary); background: var(--bg-hover); }
+      .window-button.close:hover { color: white; background: var(--danger); }
+      .window-button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+      .icon-button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: var(--radius-md); color: var(--text-muted); background: transparent; cursor: pointer; -webkit-app-region: no-drag; }
+      .icon-button:hover { color: var(--text-primary); background: var(--bg-hover); }
+      .icon-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
+      main { width: min(100% - 32px, 340px); margin: 2px auto 16px; }
+      .brand { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+      .brand img { width: 34px; height: 34px; object-fit: contain; }
+      .brand-title { display: flex; align-items: center; gap: 7px; }
+      h1 { margin: 0; font-size: 20px; line-height: 24px; letter-spacing: -.02em; }
+      .help-button { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--text-secondary); background: var(--bg-content); cursor: pointer; font-size: 13px; font-weight: 800; line-height: 1; }
+      .help-button:hover { border-color: var(--primary-500); color: var(--primary-300); background: var(--bg-hover); }
+      .lead { margin: 0 0 10px; color: var(--text-secondary); font-size: 13px; line-height: 18px; }
+      .status-card { height: 64px; min-height: 64px; max-height: 64px; display: grid; grid-template-columns: 9px minmax(0, 1fr) 86px; grid-template-rows: auto auto; align-content: center; align-items: center; column-gap: 7px; row-gap: 2px; padding: 6px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-content); }
+      .status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-disabled); box-shadow: 0 0 0 3px var(--neutral-surface); }
+      .status-card[data-phase="ready"] .status-dot, .status-card[data-phase="discord-running"] .status-dot { background: var(--success); box-shadow: 0 0 0 3px var(--success-surface); }
+      .status-card[data-phase="validating"] .status-dot, .status-card[data-phase="recovering"] .status-dot { background: var(--warning); box-shadow: 0 0 0 3px var(--warning-surface); }
+      .status-card[data-phase="error"] .status-dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-surface); }
+      #status-message { margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; line-height: 16px; overflow-wrap: anywhere; }
+      #status-detail { grid-column: 1 / -1; margin: 0; color: var(--text-muted); font-size: 10px; line-height: 13px; overflow-wrap: anywhere; }
+      .badge { width: 86px; height: 22px; display: inline-flex; align-self: center; justify-self: center; align-items: center; justify-content: center; padding: 0 8px; border: 1px solid var(--neutral-state-border); border-radius: var(--radius-pill); background: var(--neutral-surface); color: var(--text-secondary); font-size: 10px; font-weight: 700; line-height: 1; letter-spacing: .04em; text-align: center; }
+      .status-card[data-phase="ready"] .badge, .status-card[data-phase="discord-running"] .badge { border-color: var(--success-state-border); color: var(--success); background: var(--success-surface); }
+      .status-card[data-phase="validating"] .badge, .status-card[data-phase="recovering"] .badge { border-color: var(--warning-state-border); color: var(--warning); background: var(--warning-surface); }
+      .status-card[data-phase="error"] .badge { border-color: var(--danger-state-border); color: var(--danger); background: var(--danger-surface); }
+      .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+      .primary-action, .restart-action { width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: var(--radius-md); cursor: pointer; font-size: 12px; font-weight: 700; }
+      .primary-action { border: 0; color: white; background: var(--primary-500); }
+      .primary-action:hover { background: var(--primary-600); }
+      .primary-action:active { background: var(--primary-700); transform: translateY(1px); }
+      .primary-action:disabled { color: var(--text-disabled); background: var(--bg-elevated); cursor: wait; transform: none; }
+      .primary-action.is-active { border: 1px solid var(--success-state-border); color: var(--success); background: var(--success-surface); }
+      .primary-action.is-active:hover { border-color: var(--danger-state-border); color: var(--danger); background: var(--danger-surface); }
+      .restart-action { border: 1px solid var(--border-strong); color: var(--text-primary); background: var(--bg-content); }
+      .restart-action:hover { border-color: var(--primary-500); background: var(--bg-hover); }
+      .restart-action:disabled { border-color: var(--border-subtle); color: var(--text-disabled); background: var(--bg-content); cursor: not-allowed; }
+      .primary-action svg, .restart-action svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+      .preference { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 38px; color: var(--text-secondary); font-size: 12px; }
+      .switch { position: relative; width: 36px; height: 20px; flex: 0 0 auto; }
+      .switch input { position: absolute; opacity: 0; pointer-events: none; }
+      .switch-track { position: absolute; inset: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-pill); background: var(--bg-elevated); cursor: pointer; }
+      .switch-track::after { content: ""; position: absolute; width: 14px; height: 14px; left: 2px; top: 2px; border-radius: 50%; background: var(--text-muted); transition: transform var(--duration-normal), background var(--duration-normal); }
+      .switch input:checked + .switch-track { border-color: var(--primary-500); background: var(--primary-500); }
+      .switch input:checked + .switch-track::after { transform: translateX(16px); background: white; }
+      .switch input:focus-visible + .switch-track { outline: 2px solid var(--primary-300); outline-offset: 2px; }
+      details { border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
+      summary { min-height: 40px; display: flex; align-items: center; justify-content: space-between; color: var(--text-secondary); cursor: pointer; font-size: 12px; font-weight: 600; list-style: none; }
+      summary::-webkit-details-marker { display: none; }
+      summary::after { content: "+"; color: var(--text-secondary); font-size: 22px; font-weight: 400; }
+      details[open] summary::after { content: "−"; }
+      .advanced { padding: 0 0 16px; }
+      .field { display: block; margin: 12px 0 6px; color: var(--text-secondary); font-size: 13px; font-weight: 600; }
+      input[type="password"], select { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-primary); background: var(--bg-elevated); }
+      input::placeholder { color: var(--text-muted); }
+      .path-value { margin: 6px 0 0; overflow: hidden; color: var(--text-muted); font: 11px/16px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+      .discord-actions { margin-top: 8px; }
+      .secondary-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+      .secondary-actions button { min-height: 34px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: var(--bg-elevated); cursor: pointer; font-size: 12px; font-weight: 600; }
+      .secondary-actions button:hover { background: var(--bg-hover); }
+      button:disabled, select:disabled, input:disabled { opacity: .58; cursor: wait; }
+      pre { display: none; max-height: 160px; margin: 12px 0 0; padding: 12px; overflow: auto; border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-secondary); background: var(--bg-elevated); box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%); font: 11px/16px var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+      pre.visible { display: block; }
+      pre.success { border-color: rgb(53 201 135 / 55%); }
+      pre.error { border-color: rgb(232 90 104 / 60%); }
+      #scroll-indicator { position: fixed; z-index: 30; right: 10px; bottom: 10px; width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid rgb(157 168 255 / 45%); border-radius: 50%; color: white; background: var(--primary-500); box-shadow: 0 6px 18px rgb(0 0 0 / 28%); cursor: pointer; }
+      #scroll-indicator[hidden] { display: none; }
+      #scroll-indicator:hover { background: var(--primary-600); }
+      #scroll-indicator svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+      .footnote { margin: 10px auto 0; max-width: 320px; color: var(--text-muted); font-size: 11px; line-height: 16px; text-align: center; }
+      dialog { width: min(calc(100% - 32px), 328px); max-height: calc(100% - 40px); padding: 0; overflow: hidden; border: 1px solid var(--border-strong); border-radius: var(--radius-lg); color: var(--text-primary); background: var(--bg-content); box-shadow: 0 18px 60px rgb(0 0 0 / 45%); }
+      dialog::backdrop { background: rgb(8 9 12 / 72%); backdrop-filter: blur(2px); }
+      .modal-shell { max-height: calc(100vh - 40px); padding: 16px; overflow-y: auto; }
+      .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+      .modal-header h2 { margin: 0; font-size: 17px; line-height: 22px; }
+      .modal-close { width: 28px; height: 28px; display: grid; flex: 0 0 auto; place-items: center; padding: 0; border: 0; border-radius: var(--radius-sm); color: var(--text-muted); background: transparent; cursor: pointer; font-size: 21px; line-height: 1; }
+      .modal-close:hover { color: var(--text-primary); background: var(--bg-hover); }
+      .modal-intro { margin: 0 0 12px; color: var(--text-secondary); font-size: 12px; line-height: 17px; }
+      .explain-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+      .explain-list li { padding: 9px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-elevated); }
+      .explain-list strong { display: block; margin-bottom: 2px; color: var(--text-primary); font-size: 12px; line-height: 16px; }
+      .explain-list span { display: block; color: var(--text-secondary); font-size: 11px; line-height: 16px; }
+      .modal-note { margin: 12px 0 0; color: var(--text-muted); font-size: 10px; line-height: 15px; text-align: center; }
+      [data-theme="light"] .status-card { border-color: #d6dae2; box-shadow: 0 1px 3px rgb(32 34 40 / 7%); }
+      [data-theme="light"] .primary-action.is-active { box-shadow: 0 1px 2px rgb(23 122 85 / 10%); }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+    </style>
+  </head>
+  <body>
+    <header class="titlebar">
+      <button id="theme" class="icon-button" type="button" aria-label="Alternar tema" title="Alternar tema">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+      </button>
+      <div class="window-actions">
+        <button id="minimize" class="window-button" type="button" aria-label="Minimizar" title="Minimizar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button>
+        <button id="close" class="window-button close" type="button" aria-label="Fechar" title="Fechar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg></button>
+      </div>
+    </header>
+    <main>
+      <section class="brand" aria-labelledby="app-title">
+        <img src="../assets/app-icon.png" alt="">
+        <div class="brand-title">
+          <h1 id="app-title">GoLiveBack</h1>
+          <button id="help" class="help-button" type="button" aria-label="Como o GoLiveBack funciona" title="Como funciona?">?</button>
+        </div>
+      </section>
+      <p class="lead">Go Live e câmera de volta para aplicação Desktop</p>
+      <section id="status-card" class="status-card" data-phase="idle" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <p id="status-message">Pronto para iniciar.</p>
+        <span id="status-badge" class="badge">INATIVO</span>
+        <p id="status-detail">Ative o GoLive para criar uma rota</p>
+      </section>
+      <div class="action-row">
+        <button id="protected" class="primary-action" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8m5.66-5.66a8 8 0 1 1-11.32 0"/></svg><span>Ativar GoLive</span>
+        </button>
+        <button id="restart" class="restart-action" type="button" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 8a7 7 0 0 1 11.2-1.4L20 9M4 15l2.7 2.4A7 7 0 0 0 17.9 16"/></svg><span>Reiniciar Discord</span>
+        </button>
+      </div>
+      <label class="preference">
+        <span class="switch"><input id="startWithWindows" type="checkbox"><span class="switch-track"></span></span><span>Ativar GoLive com o Windows</span>
+      </label>
+      <details>
+        <summary>Configurações avançadas</summary>
+        <div class="advanced">
+          <label class="field" for="discord-installation">Detectar Discord</label>
+          <select id="discord-installation" disabled><option value="">Procurando instalações…</option></select>
+          <p id="discord-path" class="path-value">Verificando o computador…</p>
+          <div class="secondary-actions discord-actions">
+            <button id="choose-discord" type="button">Selecionar executável</button>
+          </div>
+          <label class="field" for="proxy">Proxy SOCKS5 personalizada</label>
+          <input id="proxy" type="password" spellcheck="false" autocomplete="off" placeholder="socks5://servidor:1080">
+          <div class="secondary-actions">
+            <button id="activate" type="button">Usar proxy</button><button id="open-log" type="button">Abrir log</button>
+          </div>
+          <pre id="output">Aguardando diagnóstico…</pre>
+        </div>
+      </details>
+      <p class="footnote">Ative a rota, abra o Discord, se estiver aberto use “Reiniciar Discord” para aplicar a proteção. Fechar esta janela mantém o GoLiveBack na bandeja do sistema.</p>
+    </main>
+    <button id="scroll-indicator" type="button" aria-label="Mais conteúdo abaixo" title="Mais conteúdo abaixo" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <dialog id="about-modal" aria-labelledby="about-title">
+      <div class="modal-shell">
+        <header class="modal-header">
+          <h2 id="about-title">Como o GoLiveBack funciona?</h2>
+          <button id="close-about" class="modal-close" type="button" aria-label="Fechar explicação" title="Fechar">×</button>
+        </header>
+        <p class="modal-intro">O GoLiveBack prepara uma rota externa somente para a parte do Discord responsável pela conexão do Go Live e da câmera. Ele não altera arquivos nem instala complementos no Discord.</p>
+        <ul class="explain-list">
+          <li><strong>1. Encontra uma saída segura</strong><span>O Tor integrado procura uma conexão válida fora do Brasil. Se você preferir, também pode usar uma proxy própria.</span></li>
+          <li><strong>2. Cria uma rota local</strong><span>Um proxy SOCKS5 e um pequeno arquivo PAC direcionam apenas os endereços necessários do Discord para essa saída.</span></li>
+          <li><strong>3. Reabre o Discord protegido</strong><span>Ao usar “Reiniciar Discord”, o cliente volta a abrir sabendo que deve usar a rota preparada pelo GoLiveBack.</span></li>
+          <li><strong>4. Mantém tudo funcionando</strong><span>Um monitor verifica a rota periodicamente e tenta recuperá-la se a conexão for interrompida.</span></li>
+        </ul>
+        <p class="modal-note">Áudio, vídeo, downloads e o restante da navegação continuam usando sua conexão normal.</p>
+      </div>
+    </dialog>
+    <script src="./renderer.js"></script>
+  </body>
+</html>
