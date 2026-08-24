@@ -11,6 +11,6 @@ test("logger redacts SOCKS credentials", async () => {
   logger.info("using socks5://alice:secret@example.test:1080");
   await logger.tail();
   const contents = await readFile(logger.file, "utf8");
-  assert.doesNotMatch(contents, /alice|secret/);
-  assert.match(contents, /socks5:\/\/\*\*\*:\*\*\*@example\.test:1080/);
+  assert.doesNotMatch(contents, /alice|secret|example\.test/);
+  assert.match(contents, /socks5:\/\/\[redigido\]/);
 });

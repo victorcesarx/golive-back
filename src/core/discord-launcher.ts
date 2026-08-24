@@ -1,9 +1,21 @@
-import { execFile, spawn } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import type { DiscordInstallation } from "./discord.js";
+import {
+  listWindowsProcessesByExecutable,
+  stopWindowsProcessesByExecutable,
+  type WindowsProcessReference
+} from "./windows-executable.js";
 
-const execFileAsync = promisify(execFile);
+export interface DiscordProcessController {
+  list(executable: string): Promise<WindowsProcessReference[]>;
+  stop(executable: string): Promise<number[]>;
+}
+
+const windowsProcessController: DiscordProcessController = {
+  list: listWindowsProcessesByExecutable,
+  stop: stopWindowsProcessesByExecutable
+};
 
 export function discordProcessName(installation: DiscordInstallation): string {
   return path.basename(installation.executable);
@@ -17,36 +29,27 @@ export function discordLaunchArguments(pacUrl: string): string[] {
   return [`--proxy-pac-url=${url.toString()}`];
 }
 
-export async function isDiscordRunning(installation: DiscordInstallation): Promise<boolean> {
+export async function isDiscordRunning(
+  installation: DiscordInstallation,
+  controller: DiscordProcessController = windowsProcessController
+): Promise<boolean> {
   if (process.platform !== "win32") throw new Error("Discord process detection is Windows-only in this MVP");
-  const imageName = discordProcessName(installation);
-  const { stdout } = await execFileAsync("tasklist.exe", ["/FI", `IMAGENAME eq ${imageName}`, "/FO", "CSV", "/NH"], {
-    windowsHide: true,
-    timeout: 5_000
-  });
-  return stdout.toLowerCase().includes(`"${imageName.toLowerCase()}"`);
+  return (await controller.list(installation.executable)).length > 0;
 }
 
-export async function stopDiscord(installation: DiscordInstallation): Promise<boolean> {
+export async function stopDiscord(
+  installation: DiscordInstallation,
+  controller: DiscordProcessController = windowsProcessController
+): Promise<boolean> {
   if (process.platform !== "win32") throw new Error("Discord process control is Windows-only in this MVP");
-  if (!await isDiscordRunning(installation)) return false;
-  const imageName = discordProcessName(installation);
-  try {
-    await execFileAsync("taskkill.exe", ["/IM", imageName, "/T", "/F"], {
-      windowsHide: true,
-      timeout: 10_000
-    });
-  } catch (error) {
-    // Discord can finish between detection and taskkill. Only surface an error when
-    // the process is still alive after that race.
-    if (await isDiscordRunning(installation)) throw error;
-  }
+  if (!await isDiscordRunning(installation, controller)) return false;
+  await controller.stop(installation.executable);
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    if (!await isDiscordRunning(installation)) return true;
+    if (!await isDiscordRunning(installation, controller)) return true;
     await new Promise(resolve => setTimeout(resolve, 200));
   }
-  throw new Error(`Discord ${imageName} did not close in time`);
+  throw new Error(`Discord ${discordProcessName(installation)} did not close in time`);
 }
 
 export async function launchDiscord(installation: DiscordInstallation, pacUrl: string): Promise<number | undefined> {

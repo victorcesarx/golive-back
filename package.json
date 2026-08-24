@@ -1,7 +1,8 @@
 {
   "name": "goliveback",
-  "version": "0.15.0",
+  "version": "1.16.0",
   "private": true,
+  "packageManager": "pnpm@10.34.5",
   "type": "module",
   "description": "Restaura Go Live e câmera no Discord por uma rota externa, sem injeção",
   "author": "GoLiveBack contributors",
@@ -13,15 +14,26 @@
   "homepage": "https://github.com/victorcesarx/golive-back#readme",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/clean-dist.mjs && tsc",
+    "icons:generate": "electron scripts/generate-icons.mjs",
     "dev": "pnpm build && electron .",
     "start": "electron .",
     "test": "pnpm build && node --test dist/**/*.test.js",
-    "package:win": "pnpm build && electron-builder --win portable"
+    "verify:tor": "node scripts/verify-tor-bundle.mjs",
+    "security:secrets": "node scripts/scan-secrets.mjs",
+    "security:check": "pnpm test && pnpm audit --audit-level high && pnpm verify:tor && pnpm security:secrets",
+    "compliance": "node scripts/generate-compliance-artifacts.mjs",
+    "check:tor-updates": "node scripts/check-tor-updates.mjs",
+    "experiment:no-geoip": "pnpm build && node scripts/experiment-no-geoip.mjs",
+    "metrics:build": "node scripts/write-build-metrics.mjs",
+    "package:win": "pnpm build && electron-builder --win portable",
+    "release:win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release-windows.ps1",
+    "verify:release": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-release.ps1"
   },
   "devDependencies": {
+    "@electron/fuses": "2.1.3",
     "@types/node": "^24.0.0",
-    "electron": "^38.0.0",
+    "electron": "43.4.1",
     "electron-builder": "^26.0.0",
     "typescript": "^5.9.0"
   },
@@ -32,23 +44,95 @@
     "directories": {
       "output": "release"
     },
+    "asar": true,
+    "compression": "normal",
+    "electronLanguages": [
+      "pt-BR",
+      "en-US"
+    ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": false
+    },
     "files": [
       "dist/**",
+      "!dist/**/*.test.js",
       "public/**",
-      "assets/**",
+      "assets/app-icon.png",
+      "assets/tray-icon.png",
       "README.md",
       "THIRD_PARTY_NOTICES.md",
       "package.json"
     ],
     "extraResources": [
       {
-        "from": "vendor/tor",
-        "to": "tor"
+        "from": "vendor/tor/tor/tor.exe",
+        "to": "tor/tor/tor.exe"
+      },
+      {
+        "from": "vendor/tor/data/geoip",
+        "to": "tor/data/geoip"
+      },
+      {
+        "from": "vendor/tor/data/geoip6",
+        "to": "tor/data/geoip6"
+      },
+      {
+        "from": "vendor/tor/BUNDLE-MANIFEST.json",
+        "to": "tor/SOURCE-BUNDLE-MANIFEST.json"
+      },
+      {
+        "from": "vendor/tor/docs/tor.txt",
+        "to": "third-party-licenses/tor/tor.txt"
+      },
+      {
+        "from": "vendor/tor/docs/openssl.txt",
+        "to": "third-party-licenses/tor/openssl.txt"
+      },
+      {
+        "from": "vendor/tor/docs/libevent.txt",
+        "to": "third-party-licenses/tor/libevent.txt"
+      },
+      {
+        "from": "vendor/tor/docs/zlib.txt",
+        "to": "third-party-licenses/tor/zlib.txt"
       }
     ],
     "win": {
-      "target": "portable",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "assets/app-icon.ico"
+    },
+    "nsis": {
+      "artifactName": "GoLiveBack-Setup-${version}-${arch}.${ext}",
+      "installerIcon": "assets/app-icon.ico",
+      "installerHeaderIcon": "assets/app-icon.ico",
+      "uninstallerIcon": "assets/app-icon.ico",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "differentialPackage": false,
+      "buildUniversalInstaller": false
+    },
+    "portable": {
+      "artifactName": "GoLiveBack-Portable-${version}-${arch}.${ext}",
+      "buildUniversalInstaller": false
     }
   },
   "pnpm": {

@@ -1,0 +1,88 @@
+name: Segurança contínua
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 9 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: windows-latest
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Configurar pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.34.5
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Instalar dependências imutáveis
+        run: pnpm install --frozen-lockfile
+
+      - name: Testes, auditoria, Tor e segredos
+        run: pnpm security:check
+
+      - name: Gerar SBOM e relatório de licenças
+        run: pnpm compliance -- artifacts/security
+
+      - name: Preservar artefatos de compliance
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-compliance-${{ github.sha }}
+          path: artifacts/security/*.json
+          if-no-files-found: error
+
+      - name: Monitorar atualização do Tor
+        if: github.event_name == 'schedule'
+        run: pnpm check:tor-updates
+
+  package-size:
+    runs-on: windows-latest
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v7
+
+      - name: Configurar pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.34.5
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Instalar dependências imutáveis
+        run: pnpm install --frozen-lockfile
+
+      - name: Empacotar portátil x64 para orçamento
+        run: pnpm build && pnpm exec electron-builder --win portable --x64 --config.directories.output=artifacts/package-size
+
+      - name: Medir tamanho e SHA-256
+        run: pnpm metrics:build -- artifacts/package-size --enforce
+
+      - name: Preservar métricas de pacote
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-size-${{ github.sha }}
+          path: artifacts/package-size/build-metrics.json
+          if-no-files-found: error

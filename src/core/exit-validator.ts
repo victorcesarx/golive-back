@@ -76,7 +76,7 @@ async function requestThroughProxy(proxy: SocksProxy, host: string, requestPath:
       clearTimeout(timer);
       reject(error);
     });
-    socket.write(`GET ${requestPath} HTTP/1.1\r\nHost: ${host}\r\nUser-Agent: GoLiveBack/0.15\r\nConnection: close\r\n\r\n`);
+    socket.write(`GET ${requestPath} HTTP/1.1\r\nHost: ${host}\r\nUser-Agent: GoLiveBack/0.16\r\nConnection: close\r\n\r\n`);
   });
 }
 

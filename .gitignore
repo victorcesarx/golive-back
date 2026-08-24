@@ -2,5 +2,10 @@ node_modules/
 .pnpm-store/
 dist/
 release/
+docs/
 *.log
 .env
+*.p12
+*.pfx
+*.pvk
+*.key

@@ -1,12 +1,9 @@
 import { appendFile, mkdir, readFile, rename, stat } from "node:fs/promises";
 import path from "node:path";
+import { redactSensitiveText } from "./sensitive-data.js";
 
 const MAX_LOG_BYTES = 256 * 1024;
 const MAX_TAIL_LINES = 120;
-
-function redact(message: string): string {
-  return message.replace(/(socks5:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1***:***@");
-}
 
 function timestamp(date = new Date()): string {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -44,7 +41,7 @@ export class AppLogger {
 
   private enqueue(level: string, message: string) {
     const readableLevel = level === "ERROR" ? "ERRO" : "INFO";
-    const line = `[${timestamp()}] ${readableLevel} | ${redact(message).slice(0, 2_000)}\n`;
+    const line = `[${timestamp()}] ${readableLevel} | ${redactSensitiveText(message).slice(0, 2_000)}\n`;
     this.writeQueue = this.writeQueue.then(async () => {
       await mkdir(path.dirname(this.file), { recursive: true });
       try {

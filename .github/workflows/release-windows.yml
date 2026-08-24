@@ -1,0 +1,96 @@
+name: Release Windows assinada
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    environment: release
+
+    steps:
+      - name: Obter código da tag
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Configurar pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.34.5
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Instalar dependências imutáveis
+        run: pnpm install --frozen-lockfile
+
+      - name: Confirmar versão da tag
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "A tag $env:GITHUB_REF_NAME não corresponde à versão v$version do package.json."
+          }
+
+      - name: Gerar e verificar release assinada
+        shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          GOLIVEBACK_CERTIFICATE_THUMBPRINT: ${{ vars.GOLIVEBACK_CERTIFICATE_THUMBPRINT }}
+        run: ./scripts/release-windows.ps1
+
+      - name: Preservar artefatos verificados
+        uses: actions/upload-artifact@v7
+        with:
+          name: GoLiveBack-${{ github.ref_name }}-windows
+          path: |
+            release/official/GoLiveBack-*.exe
+            release/official/GoLiveBack-*.blockmap
+            release/official/latest.yml
+            release/official/SHA256SUMS.txt
+            release/official/release-manifest.json
+            release/official/build-metrics.json
+            release/official/bom.cdx.json
+            release/official/THIRD-PARTY-LICENSES.json
+          if-no-files-found: error
+
+      - name: Criar rascunho da release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = Get-ChildItem release/official -File | Where-Object {
+            $_.Name -like "GoLiveBack-*.exe" -or
+            $_.Name -like "GoLiveBack-*.blockmap" -or
+            $_.Name -eq "latest.yml" -or
+            $_.Name -eq "SHA256SUMS.txt" -or
+            $_.Name -eq "release-manifest.json" -or
+            $_.Name -eq "build-metrics.json" -or
+            $_.Name -eq "bom.cdx.json" -or
+            $_.Name -eq "THIRD-PARTY-LICENSES.json"
+          } | ForEach-Object { $_.FullName }
+          $arguments = @(
+            "release", "create", $env:GITHUB_REF_NAME
+          ) + $assets + @(
+            "--verify-tag", "--draft", "--generate-notes",
+            "--title", "GoLiveBack $env:GITHUB_REF_NAME"
+          )
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) { throw "Não foi possível criar o rascunho da release." }

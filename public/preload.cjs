@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("gatewayRoute", Object.freeze({
   restartDiscord: () => ipcRenderer.invoke("discord:restart"),
   getStatus: () => ipcRenderer.invoke("app:status"),
   openLog: () => ipcRenderer.invoke("app:open-log"),
+  checkUpdate: () => ipcRenderer.invoke("app:check-update"),
   getPreferences: () => ipcRenderer.invoke("preferences:get"),
   setStartWithWindows: enabled => ipcRenderer.invoke("preferences:set-start-with-windows", enabled),
   activateGoLive: () => ipcRenderer.invoke("app:activate-golive"),
@@ -18,5 +19,10 @@ contextBridge.exposeInMainWorld("gatewayRoute", Object.freeze({
     const listener = (_event, status) => callback(status);
     ipcRenderer.on("status:update", listener);
     return () => ipcRenderer.removeListener("status:update", listener);
+  },
+  onClearSensitiveFields: callback => {
+    const listener = () => callback();
+    ipcRenderer.on("security:clear-sensitive-fields", listener);
+    return () => ipcRenderer.removeListener("security:clear-sensitive-fields", listener);
   }
 }));

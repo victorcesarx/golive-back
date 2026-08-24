@@ -8,6 +8,30 @@ export interface SocksProxy {
   password?: string;
 }
 
+export function hasSocksProxyCredentials(proxy: SocksProxy) {
+  return Boolean(proxy.username && proxy.password);
+}
+
+export function isLoopbackSocksProxy(proxy: SocksProxy) {
+  const host = proxy.host.toLowerCase().replace(/^\[|\]$/g, "");
+  return host === "localhost"
+    || host === "::1"
+    || host.startsWith("::ffff:127.")
+    || /^127(?:\.\d{1,3}){3}$/.test(host);
+}
+
+export function requiresRemoteSocksCredentialWarning(proxy: SocksProxy) {
+  return hasSocksProxyCredentials(proxy) && !isLoopbackSocksProxy(proxy);
+}
+
+export function clearSocksProxyCredentials(proxy: SocksProxy | undefined) {
+  if (!proxy) return;
+  if (proxy.username !== undefined) proxy.username = "";
+  if (proxy.password !== undefined) proxy.password = "";
+  delete proxy.username;
+  delete proxy.password;
+}
+
 export function parseSocksProxy(value: string): SocksProxy {
   const url = new URL(value);
   if (url.protocol !== "socks5:") throw new Error("Only socks5:// proxies are supported in this stage");
@@ -17,6 +41,9 @@ export function parseSocksProxy(value: string): SocksProxy {
   }
   const username = decodeURIComponent(url.username);
   const password = decodeURIComponent(url.password);
+  if (Boolean(username) !== Boolean(password)) {
+    throw new Error("SOCKS5 username and password must both be provided");
+  }
   if (Buffer.byteLength(username) > 255 || Buffer.byteLength(password) > 255) {
     throw new Error("SOCKS5 credentials are too long");
   }
@@ -27,6 +54,26 @@ export function parseSocksProxy(value: string): SocksProxy {
   };
 }
 
+async function writeSensitiveAuthentication(socket: Socket, usernameValue: string, passwordValue: string) {
+  const username = Buffer.from(usernameValue);
+  const password = Buffer.from(passwordValue);
+  const payload = Buffer.concat([
+    Buffer.from([1, username.length]),
+    username,
+    Buffer.from([password.length]),
+    password
+  ]);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      socket.write(payload, error => error ? reject(error) : resolve());
+    });
+  } finally {
+    username.fill(0);
+    password.fill(0);
+    payload.fill(0);
+  }
+}
+
 export async function connectViaSocks5(proxy: SocksProxy, host: string, port: number): Promise<Socket> {
   const socket = connect({ host: proxy.host, port: proxy.port });
   await new Promise<void>((resolve, reject) => {
@@ -35,16 +82,14 @@ export async function connectViaSocks5(proxy: SocksProxy, host: string, port: nu
     socket.setTimeout(8_000, () => socket.destroy(new Error("Proxy connection timed out")));
   });
   const reader = new SocketReader(socket);
-  const hasCredentials = Boolean(proxy.username);
+  const hasCredentials = hasSocksProxyCredentials(proxy);
   socket.write(Buffer.from(hasCredentials ? [5, 2, 0, 2] : [5, 1, 0]));
   const greeting = await reader.read(2);
   if (greeting[0] !== 5 || greeting[1] === 255) throw new Error("SOCKS5 proxy rejected authentication methods");
 
   if (greeting[1] === 2) {
     if (!hasCredentials) throw new Error("SOCKS5 proxy requires credentials");
-    const username = Buffer.from(proxy.username ?? "");
-    const password = Buffer.from(proxy.password ?? "");
-    socket.write(Buffer.concat([Buffer.from([1, username.length]), username, Buffer.from([password.length]), password]));
+    await writeSensitiveAuthentication(socket, proxy.username ?? "", proxy.password ?? "");
     const authentication = await reader.read(2);
     if (authentication[1] !== 0) throw new Error("SOCKS5 proxy rejected credentials");
   } else if (greeting[1] !== 0) {

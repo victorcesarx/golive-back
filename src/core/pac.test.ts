@@ -21,3 +21,9 @@ test("PAC server binds to loopback and serves a private route", async () => {
     await server.close();
   }
 });
+
+test("PAC shutdown is idempotent and releases its loopback port", async () => {
+  const server = await startPacServer(32123);
+  await Promise.all([server.close(), server.close()]);
+  await assert.rejects(fetch(server.url));
+});

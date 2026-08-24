@@ -3,11 +3,12 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; connect-src 'none'; form-action 'none'; img-src 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'">
     <title>GoLiveBack</title>
     <style>
       :root {
         color-scheme: dark;
+        --footer-height: 74px;
         --primary-300: #9da8ff; --primary-500: #6673e8; --primary-600: #5662d4; --primary-700: #4651b9;
         --bg-canvas: #17181c; --bg-content: #282a31; --bg-elevated: #30333b; --bg-hover: #383b44;
         --border-subtle: #353841; --border-strong: #4a4e59;
@@ -33,7 +34,7 @@
       }
       * { box-sizing: border-box; }
       html { min-height: 100%; overflow-y: auto; }
-      body { min-height: 100%; margin: 0; padding-top: 46px; background: var(--bg-canvas); color: var(--text-primary); font-family: var(--font-ui); font-size: 14px; line-height: 20px; }
+      body { min-height: 100%; margin: 0; padding: 46px 0 calc(var(--footer-height) + 12px); background: var(--bg-canvas); color: var(--text-primary); font-family: var(--font-ui); font-size: 14px; line-height: 20px; }
       ::-webkit-scrollbar { width: 0; height: 0; }
       button, input, select { font: inherit; }
       button, summary, input, select { transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast), transform var(--duration-fast); }
@@ -55,14 +56,14 @@
       .help-button { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--text-secondary); background: var(--bg-content); cursor: pointer; font-size: 13px; font-weight: 800; line-height: 1; }
       .help-button:hover { border-color: var(--primary-500); color: var(--primary-300); background: var(--bg-hover); }
       .lead { margin: 0 0 10px; color: var(--text-secondary); font-size: 13px; line-height: 18px; }
-      .status-card { height: 64px; min-height: 64px; max-height: 64px; display: grid; grid-template-columns: 9px minmax(0, 1fr) 86px; grid-template-rows: auto auto; align-content: center; align-items: center; column-gap: 7px; row-gap: 2px; padding: 6px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-content); }
+      .status-card { position: relative; height: 64px; min-height: 64px; max-height: 64px; display: grid; grid-template-columns: 9px minmax(0, 1fr); grid-template-rows: auto auto; align-content: center; align-items: center; column-gap: 7px; row-gap: 2px; padding: 6px 104px 6px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-content); }
       .status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-disabled); box-shadow: 0 0 0 3px var(--neutral-surface); }
       .status-card[data-phase="ready"] .status-dot, .status-card[data-phase="discord-running"] .status-dot { background: var(--success); box-shadow: 0 0 0 3px var(--success-surface); }
       .status-card[data-phase="validating"] .status-dot, .status-card[data-phase="recovering"] .status-dot { background: var(--warning); box-shadow: 0 0 0 3px var(--warning-surface); }
       .status-card[data-phase="error"] .status-dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-surface); }
       #status-message { margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; line-height: 16px; overflow-wrap: anywhere; }
       #status-detail { grid-column: 1 / -1; margin: 0; color: var(--text-muted); font-size: 10px; line-height: 13px; overflow-wrap: anywhere; }
-      .badge { width: 86px; height: 22px; display: inline-flex; align-self: center; justify-self: center; align-items: center; justify-content: center; padding: 0 8px; border: 1px solid var(--neutral-state-border); border-radius: var(--radius-pill); background: var(--neutral-surface); color: var(--text-secondary); font-size: 10px; font-weight: 700; line-height: 1; letter-spacing: .04em; text-align: center; }
+      .badge { position: absolute; top: 50%; right: 9px; width: 86px; height: 22px; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; border: 1px solid var(--neutral-state-border); border-radius: var(--radius-pill); background: var(--neutral-surface); color: var(--text-secondary); font-size: 10px; font-weight: 700; line-height: 1; letter-spacing: .04em; text-align: center; transform: translateY(-50%); }
       .status-card[data-phase="ready"] .badge, .status-card[data-phase="discord-running"] .badge { border-color: var(--success-state-border); color: var(--success); background: var(--success-surface); }
       .status-card[data-phase="validating"] .badge, .status-card[data-phase="recovering"] .badge { border-color: var(--warning-state-border); color: var(--warning); background: var(--warning-surface); }
       .status-card[data-phase="error"] .badge { border-color: var(--danger-state-border); color: var(--danger); background: var(--danger-surface); }
@@ -93,10 +94,20 @@
       details[open] summary::after { content: "−"; }
       .advanced { padding: 0 0 16px; }
       .field { display: block; margin: 12px 0 6px; color: var(--text-secondary); font-size: 13px; font-weight: 600; }
-      input[type="password"], select { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-primary); background: var(--bg-elevated); }
+      #proxy, select { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-primary); background: var(--bg-elevated); }
       input::placeholder { color: var(--text-muted); }
       .path-value { margin: 6px 0 0; overflow: hidden; color: var(--text-muted); font: 11px/16px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
-      .discord-actions { margin-top: 8px; }
+      .inline-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+      .inline-action { height: 36px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: var(--bg-elevated); cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; }
+      .inline-action:hover { background: var(--bg-hover); }
+      .secret-field { position: relative; min-width: 0; }
+      .secret-field #proxy { padding-right: 38px; }
+      .reveal-secret { position: absolute; top: 2px; right: 2px; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--radius-sm); color: var(--text-muted); background: transparent; cursor: pointer; }
+      .reveal-secret:hover { color: var(--text-primary); background: var(--bg-hover); }
+      .reveal-secret svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+      .reveal-secret .eye-off, .reveal-secret.is-visible .eye-on { display: none; }
+      .reveal-secret.is-visible .eye-off { display: block; }
+      .proxy-warning { margin: 7px 0 0; color: var(--warning); font-size: 10px; line-height: 14px; }
       .secondary-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
       .secondary-actions button { min-height: 34px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: var(--bg-elevated); cursor: pointer; font-size: 12px; font-weight: 600; }
       .secondary-actions button:hover { background: var(--bg-hover); }
@@ -105,11 +116,15 @@
       pre.visible { display: block; }
       pre.success { border-color: rgb(53 201 135 / 55%); }
       pre.error { border-color: rgb(232 90 104 / 60%); }
-      #scroll-indicator { position: fixed; z-index: 30; right: 10px; bottom: 10px; width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid rgb(157 168 255 / 45%); border-radius: 50%; color: white; background: var(--primary-500); box-shadow: 0 6px 18px rgb(0 0 0 / 28%); cursor: pointer; }
+      #scroll-indicator { position: fixed; z-index: 30; right: 10px; bottom: calc(var(--footer-height) + 10px); width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid rgb(157 168 255 / 45%); border-radius: 50%; color: white; background: var(--primary-500); box-shadow: 0 6px 18px rgb(0 0 0 / 28%); cursor: pointer; }
       #scroll-indicator[hidden] { display: none; }
       #scroll-indicator:hover { background: var(--primary-600); }
       #scroll-indicator svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
-      .footnote { margin: 10px auto 0; max-width: 320px; color: var(--text-muted); font-size: 11px; line-height: 16px; text-align: center; }
+      .footnote { position: fixed; z-index: 15; right: 0; bottom: 0; left: 0; min-height: var(--footer-height); display: flex; align-items: center; justify-content: center; margin: 0; padding: 8px 26px 10px; border-top: 1px solid var(--border-subtle); background: var(--bg-canvas); box-shadow: 0 -10px 24px rgb(0 0 0 / 12%); }
+      .footnote p { width: 100%; max-width: 340px; margin: 0; color: var(--text-muted); font-size: 11px; line-height: 16px; text-align: center; }
+      body:has(details[open]) { padding-bottom: 0; }
+      body:has(details[open]) .footnote { position: static; min-height: var(--footer-height); box-shadow: none; }
+      body:has(details[open]) #scroll-indicator { bottom: 10px; }
       dialog { width: min(calc(100% - 32px), 328px); max-height: calc(100% - 40px); padding: 0; overflow: hidden; border: 1px solid var(--border-strong); border-radius: var(--radius-lg); color: var(--text-primary); background: var(--bg-content); box-shadow: 0 18px 60px rgb(0 0 0 / 45%); }
       dialog::backdrop { background: rgb(8 9 12 / 72%); backdrop-filter: blur(2px); }
       .modal-shell { max-height: calc(100vh - 40px); padding: 16px; overflow-y: auto; }
@@ -168,21 +183,32 @@
         <summary>Configurações avançadas</summary>
         <div class="advanced">
           <label class="field" for="discord-installation">Detectar Discord</label>
-          <select id="discord-installation" disabled><option value="">Procurando instalações…</option></select>
-          <p id="discord-path" class="path-value">Verificando o computador…</p>
-          <div class="secondary-actions discord-actions">
-            <button id="choose-discord" type="button">Selecionar executável</button>
+          <div class="inline-control">
+            <select id="discord-installation" disabled><option value="">Procurando instalações…</option></select>
+            <button id="choose-discord" class="inline-action" type="button">Selecionar executável</button>
           </div>
+          <p id="discord-path" class="path-value">Verificando o computador…</p>
           <label class="field" for="proxy">Proxy SOCKS5 personalizada</label>
-          <input id="proxy" type="password" spellcheck="false" autocomplete="off" placeholder="socks5://servidor:1080">
+          <div class="inline-control">
+            <div class="secret-field">
+              <input id="proxy" type="password" spellcheck="false" autocomplete="off" placeholder="socks5://servidor:1080">
+              <button id="reveal-proxy" class="reveal-secret" type="button" aria-label="Mostrar proxy" aria-pressed="false" title="Mostrar proxy">
+                <svg class="eye-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                <svg class="eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 6.2A10.8 10.8 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.1 2.7M6.1 6.1C3.8 7.7 2.5 12 2.5 12s3.5 6 9.5 6a9.8 9.8 0 0 0 3-.5M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+              </button>
+            </div>
+            <button id="activate" class="inline-action" type="button">Usar proxy</button>
+          </div>
+          <p class="proxy-warning">Proxy remota com login: usuário e senha SOCKS5 podem trafegar sem criptografia até o servidor. Prefira uma proxy local ou um túnel protegido.</p>
           <div class="secondary-actions">
-            <button id="activate" type="button">Usar proxy</button><button id="open-log" type="button">Abrir log</button>
+            <button id="open-log" type="button">Abrir log</button>
+            <button id="check-update" type="button" aria-live="polite">Verificar atualização</button>
           </div>
           <pre id="output">Aguardando diagnóstico…</pre>
         </div>
       </details>
-      <p class="footnote">Ative a rota, abra o Discord, se estiver aberto use “Reiniciar Discord” para aplicar a proteção. Fechar esta janela mantém o GoLiveBack na bandeja do sistema.</p>
     </main>
+    <footer class="footnote"><p>Ative a rota, abra o Discord, se estiver aberto use “Reiniciar Discord” para aplicar a proteção. Fechar esta janela mantém o GoLiveBack na bandeja do sistema.</p></footer>
     <button id="scroll-indicator" type="button" aria-label="Mais conteúdo abaixo" title="Mais conteúdo abaixo" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
     </button>
@@ -195,9 +221,10 @@
         <p class="modal-intro">O GoLiveBack prepara uma rota externa somente para a parte do Discord responsável pela conexão do Go Live e da câmera. Ele não altera arquivos nem instala complementos no Discord.</p>
         <ul class="explain-list">
           <li><strong>1. Encontra uma saída segura</strong><span>O Tor integrado procura uma conexão válida fora do Brasil. Se você preferir, também pode usar uma proxy própria.</span></li>
-          <li><strong>2. Cria uma rota local</strong><span>Um proxy SOCKS5 e um pequeno arquivo PAC direcionam apenas os endereços necessários do Discord para essa saída.</span></li>
-          <li><strong>3. Reabre o Discord protegido</strong><span>Ao usar “Reiniciar Discord”, o cliente volta a abrir sabendo que deve usar a rota preparada pelo GoLiveBack.</span></li>
-          <li><strong>4. Mantém tudo funcionando</strong><span>Um monitor verifica a rota periodicamente e tenta recuperá-la se a conexão for interrompida.</span></li>
+          <li><strong>2. Proxy própria exige confiança</strong><span>Em uma proxy SOCKS5 remota, usuário e senha não possuem criptografia própria. Prefira uma proxy local ou conectada por um túnel protegido.</span></li>
+          <li><strong>3. Cria uma rota local</strong><span>Um proxy SOCKS5 e um pequeno arquivo PAC direcionam apenas os endereços necessários do Discord para essa saída.</span></li>
+          <li><strong>4. Reabre o Discord protegido</strong><span>Ao usar “Reiniciar Discord”, o cliente volta a abrir sabendo que deve usar a rota preparada pelo GoLiveBack.</span></li>
+          <li><strong>5. Mantém tudo funcionando</strong><span>Um monitor verifica a rota periodicamente e tenta recuperá-la se a conexão for interrompida.</span></li>
         </ul>
         <p class="modal-note">Áudio, vídeo, downloads e o restante da navegação continuam usando sua conexão normal.</p>
       </div>

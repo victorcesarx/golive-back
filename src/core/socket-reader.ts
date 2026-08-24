@@ -4,21 +4,36 @@ export class SocketReader {
   private buffer = Buffer.alloc(0);
   private ended = false;
   private failure: Error | undefined;
-  private readonly waiters: Array<() => void> = [];
+  private readonly waiters = new Set<() => void>();
+  private readonly onData: (chunk: Buffer) => void;
+  private readonly onEnd: () => void;
+  private readonly onError: (error: Error) => void;
 
-  constructor(private readonly socket: Socket) {
-    socket.on("data", chunk => {
+  constructor(private readonly socket: Socket, private readonly maxBufferedBytes = 64 * 1024) {
+    if (!Number.isInteger(maxBufferedBytes) || maxBufferedBytes < 512) {
+      throw new RangeError("maxBufferedBytes must be an integer of at least 512 bytes");
+    }
+    this.onData = chunk => {
+      if (this.buffer.length + chunk.length > this.maxBufferedBytes) {
+        this.failure = new Error("Socket handshake exceeded the buffer limit");
+        this.socket.destroy(this.failure);
+        this.wake();
+        return;
+      }
       this.buffer = Buffer.concat([this.buffer, chunk]);
       this.wake();
-    });
-    socket.on("end", () => {
+    };
+    this.onEnd = () => {
       this.ended = true;
       this.wake();
-    });
-    socket.on("error", error => {
+    };
+    this.onError = error => {
       this.failure = error;
       this.wake();
-    });
+    };
+    socket.on("data", this.onData);
+    socket.on("end", this.onEnd);
+    socket.on("error", this.onError);
   }
 
   async read(size: number, timeoutMs = 8_000): Promise<Buffer> {
@@ -30,11 +45,16 @@ export class SocketReader {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error("Socket read timed out");
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("Socket read timed out")), remaining);
-        this.waiters.push(() => {
+        const wake = () => {
           clearTimeout(timer);
+          this.waiters.delete(wake);
           resolve();
-        });
+        };
+        const timer = setTimeout(() => {
+          this.waiters.delete(wake);
+          reject(new Error("Socket read timed out"));
+        }, remaining);
+        this.waiters.add(wake);
       });
     }
     const result = this.buffer.subarray(0, size);
@@ -45,11 +65,13 @@ export class SocketReader {
   release(): Buffer {
     const remaining = this.buffer;
     this.buffer = Buffer.alloc(0);
-    this.socket.removeAllListeners("data");
+    this.socket.off("data", this.onData);
+    this.socket.off("end", this.onEnd);
+    this.socket.off("error", this.onError);
     return remaining;
   }
 
   private wake() {
-    for (const waiter of this.waiters.splice(0)) waiter();
+    for (const waiter of [...this.waiters]) waiter();
   }
 }

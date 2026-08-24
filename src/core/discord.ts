@@ -1,5 +1,6 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { inspectWindowsExecutable, type WindowsExecutableMetadata } from "./windows-executable.js";
 
 export type DiscordChannel = "stable" | "ptb" | "canary" | "custom";
 type KnownDiscordChannel = Exclude<DiscordChannel, "custom">;
@@ -9,7 +10,13 @@ export interface DiscordInstallation {
   version: string;
   executable: string;
   root: string;
+  trust?: "official" | "compatible";
+  publisher?: string;
+  productName?: string;
+  requiresConfirmation?: boolean;
 }
+
+export type ExecutableInspector = (executable: string) => Promise<WindowsExecutableMetadata>;
 
 const CHANNELS: ReadonlyArray<{ channel: KnownDiscordChannel; directory: string; executable: string }> = [
   { channel: "stable", directory: "Discord", executable: "Discord.exe" },
@@ -40,11 +47,43 @@ async function isFile(candidate: string): Promise<boolean> {
   }
 }
 
-export async function inspectDiscordExecutable(executable: string): Promise<DiscordInstallation> {
+export function classifyDiscordExecutable(
+  executable: string,
+  metadata: WindowsExecutableMetadata
+): Pick<DiscordInstallation, "trust" | "publisher" | "productName" | "requiresConfirmation"> {
+  const processName = path.basename(executable).toLowerCase();
+  const knownName = processName === "discord.exe" || processName === "discordptb.exe" || processName === "discordcanary.exe";
+  if (metadata.signatureStatus.toLowerCase() !== "valid" || !metadata.signerSubject) {
+    throw new Error("O executável selecionado não possui uma assinatura digital válida");
+  }
+
+  const metadataText = [metadata.productName, metadata.fileDescription, metadata.companyName]
+    .filter((value): value is string => Boolean(value))
+    .join(" ");
+  const hasDiscordIdentity = /discord/i.test(metadataText) && /discord/i.test(processName);
+  if (!hasDiscordIdentity) {
+    throw new Error("O executável selecionado não foi reconhecido como uma distribuição do Discord");
+  }
+
+  const officialPublisher = /(?:^|,\s*)(?:CN|O)=Discord Inc\.(?:,|$)/i.test(metadata.signerSubject);
+  return {
+    trust: officialPublisher && knownName ? "official" : "compatible",
+    publisher: metadata.signerSubject,
+    productName: metadata.productName ?? metadata.fileDescription ?? path.parse(executable).name,
+    requiresConfirmation: !(officialPublisher && knownName)
+  };
+}
+
+export async function inspectDiscordExecutable(
+  executable: string,
+  inspector: ExecutableInspector = inspectWindowsExecutable
+): Promise<DiscordInstallation> {
   const resolved = path.resolve(executable);
   if (path.extname(resolved).toLowerCase() !== ".exe" || !await isFile(resolved)) {
     throw new Error("Selecione um executável .exe válido do Discord");
   }
+  const metadata = await inspector(resolved);
+  const classification = classifyDiscordExecutable(resolved, metadata);
   const processName = path.basename(resolved).toLowerCase();
   const channel: DiscordChannel = processName === "discord.exe" ? "stable"
     : processName === "discordptb.exe" ? "ptb"
@@ -52,7 +91,13 @@ export async function inspectDiscordExecutable(executable: string): Promise<Disc
         : "custom";
   const parent = path.basename(path.dirname(resolved));
   const version = /^app-(\d+(?:\.\d+)+)$/i.exec(parent)?.[1] ?? "manual";
-  return { channel, version, executable: resolved, root: path.dirname(resolved) };
+  return {
+    channel,
+    version: metadata.fileVersion?.trim() || version,
+    executable: resolved,
+    root: path.dirname(resolved),
+    ...classification
+  };
 }
 
 export async function discoverDiscord(localAppData = process.env.LOCALAPPDATA): Promise<DiscordInstallation[]> {
