@@ -6,7 +6,8 @@ import path from "node:path";
 import process from "node:process";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const outputDirectory = path.resolve(projectRoot, process.argv[2] ?? "release/compliance");
+const commandArguments = process.argv.slice(2).filter(argument => argument !== "--");
+const outputDirectory = path.resolve(projectRoot, commandArguments.find(argument => !argument.startsWith("--")) ?? "release/compliance");
 const packageJson = JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8"));
 const torManifest = JSON.parse(await readFile(path.join(projectRoot, "vendor", "tor", "BUNDLE-MANIFEST.json"), "utf8"));
 const command = process.platform === "win32"

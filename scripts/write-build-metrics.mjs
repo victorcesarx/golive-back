@@ -5,9 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const requestedDirectory = process.argv[2] ?? "release/official";
+const commandArguments = process.argv.slice(2).filter(argument => argument !== "--");
+const requestedDirectory = commandArguments.find(argument => !argument.startsWith("--")) ?? "release/official";
 const releaseDirectory = path.resolve(repositoryRoot, requestedDirectory);
-const enforceBudget = process.argv.includes("--enforce");
+const enforceBudget = commandArguments.includes("--enforce");
 const packageJson = JSON.parse(await readFile(path.join(repositoryRoot, "package.json"), "utf8"));
 const budget = JSON.parse(await readFile(path.join(repositoryRoot, "build-size-budget.json"), "utf8"));
 
