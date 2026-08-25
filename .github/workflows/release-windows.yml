@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   release-windows:
+    if: vars.GOLIVEBACK_SIGNED_RELEASE_ENABLED == 'true'
     runs-on: windows-latest
     environment: release
 
