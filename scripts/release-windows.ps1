@@ -11,12 +11,6 @@ if (-not $absoluteOutput.StartsWith($releaseRoot + [System.IO.Path]::DirectorySe
   throw "A pasta de release deve permanecer dentro de '$releaseRoot'."
 }
 
-foreach ($requiredVariable in "WIN_CSC_LINK", "WIN_CSC_KEY_PASSWORD", "GOLIVEBACK_CERTIFICATE_THUMBPRINT") {
-  if (-not [Environment]::GetEnvironmentVariable($requiredVariable)) {
-    throw "Release oficial bloqueada: a variavel $requiredVariable nao esta configurada."
-  }
-}
-
 if (Test-Path -LiteralPath $absoluteOutput) {
   $existingFiles = Get-ChildItem -LiteralPath $absoluteOutput -Force -ErrorAction SilentlyContinue
   if ($existingFiles) {
@@ -26,6 +20,9 @@ if (Test-Path -LiteralPath $absoluteOutput) {
 
 Push-Location $projectRoot
 try {
+  & (Join-Path $PSScriptRoot "check-signing-readiness.ps1")
+  if ($LASTEXITCODE -ne 0) { throw "A configuracao de assinatura oficial nao esta pronta; release cancelada." }
+
   & pnpm security:check
   if ($LASTEXITCODE -ne 0) { throw "As verificacoes continuas de seguranca falharam; release cancelada." }
 

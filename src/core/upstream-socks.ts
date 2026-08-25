@@ -109,5 +109,6 @@ export async function connectViaSocks5(proxy: SocksProxy, host: string, port: nu
   const buffered = reader.release();
   if (buffered.length > 0) socket.unshift(buffered);
   socket.setTimeout(0);
+  socket.setKeepAlive(true);
   return socket;
 }

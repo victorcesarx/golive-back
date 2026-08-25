@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, session, shell, Tray, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, session, shell, Tray, type IpcMainInvokeEvent } from "electron";
+import { watch, type FSWatcher } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { discoverDiscord, inspectDiscordExecutable, type DiscordInstallation } from "./core/discord.js";
@@ -13,7 +14,9 @@ import {
   type SocksProxy
 } from "./core/upstream-socks.js";
 import { findTorExit, validateExit, type ExitValidation } from "./core/exit-validator.js";
-import { isDiscordRunning, launchDiscord, stopDiscord } from "./core/discord-launcher.js";
+import { isDiscordRunning, launchDiscord, launchDiscordDirect, stopDiscord, waitForDiscordStability } from "./core/discord-launcher.js";
+import { DiscordRestartGate } from "./core/discord-restart.js";
+import { formatDiagnosticReport, type DiagnosticHealthStatus, type DiagnosticSnapshot } from "./core/diagnostics.js";
 import { AppLogger } from "./core/logger.js";
 import { PreferenceStore } from "./core/preferences.js";
 import { startManagedTor, type ManagedTorInstance } from "./core/managed-tor.js";
@@ -62,7 +65,10 @@ let routeRecovery: Promise<boolean> | undefined;
 let routeStopPromise: Promise<void> | undefined;
 let allowQuitAfterCleanup = false;
 let quitRequestPromise: Promise<void> | undefined;
+let devUiWatcher: FSWatcher | undefined;
+let devUiReloadTimer: NodeJS.Timeout | undefined;
 const pendingRouteOperations = new Set<Promise<unknown>>();
+const discordRestartGate = new DiscordRestartGate();
 
 const shutdownCoordinator = new ShutdownCoordinator(
   async reason => {
@@ -70,6 +76,10 @@ const shutdownCoordinator = new ShutdownCoordinator(
     logger?.info(`Encerramento coordenado iniciado (${reason}).`);
     healthMonitor?.stop();
     healthMonitor = undefined;
+    devUiWatcher?.close();
+    devUiWatcher = undefined;
+    if (devUiReloadTimer) clearTimeout(devUiReloadTimer);
+    devUiReloadTimer = undefined;
     if (monitorTimer) clearInterval(monitorTimer);
     monitorTimer = undefined;
     const pending = [...pendingRouteOperations];
@@ -92,9 +102,15 @@ const shutdownCoordinator = new ShutdownCoordinator(
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
-app.on("second-instance", showWindow);
+app.on("second-instance", (_event, commandLine) => {
+  if (!app.isPackaged && commandLine.includes("--dev-restart-request")) {
+    void requestApplicationQuit("application");
+    return;
+  }
+  showWindow();
+});
 
-type AppPhase = "idle" | "validating" | "ready" | "discord-running" | "recovering" | "error";
+type AppPhase = "idle" | "validating" | "ready" | "discord-running" | "restarting" | "recovering" | "error";
 type TrayStatusKind = "idle" | "ready" | "busy" | "error";
 
 // Native menu labels render colored-circle emoji with a platform-specific glossy style.
@@ -121,6 +137,15 @@ let runtimeStatus: RuntimeStatus = {
 };
 let routeActivationStartedAt: number | undefined;
 let routeStartupDurationMs: number | undefined;
+let routeActivatedAt: number | undefined;
+let lastValidationAt: string | undefined;
+let diagnosticHealth: {
+  status: DiagnosticHealthStatus;
+  consecutiveFailures: number;
+  recoveries: number;
+  lastCheckAt: string | undefined;
+  lastError: string | undefined;
+} = { status: "stopped", consecutiveFailures: 0, recoveries: 0, lastCheckAt: undefined, lastError: undefined };
 
 function setStatus(phase: AppPhase, message: string, detail?: string) {
   runtimeStatus = { phase, message, ...(detail ? { detail } : {}), updatedAt: new Date().toISOString() };
@@ -139,11 +164,20 @@ function completeRouteTiming() {
 }
 
 function routeTimingDetail() {
-  return `Iniciada em ${routeStartupDurationMs ?? 0} ms`;
+  const durationSeconds = ((routeStartupDurationMs ?? 0) / 1_000).toFixed(1).replace(".", ",");
+  return `Conexão persistente · ${durationSeconds}s`;
 }
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function diagnosticErrorMessage(error: unknown, proxy = activeProxy) {
+  return redactSensitiveText(proxyErrorForLog(error, proxy))
+    .replace(/[A-Za-z]:\\[^\r\n]+/g, "[caminho redigido]")
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "[ip redigido]")
+    .replace(/:\d{2,5}\b/g, ":[porta redigida]")
+    .slice(0, 500);
 }
 
 function trackRouteOperation<T>(operation: () => Promise<T>): Promise<T> {
@@ -318,6 +352,9 @@ async function performStopRoute(stopTor: boolean, announce: boolean) {
   activeProxy = undefined;
   activeProxyReference = undefined;
   activeValidation = undefined;
+  routeActivatedAt = undefined;
+  diagnosticHealth.status = "stopped";
+  diagnosticHealth.consecutiveFailures = 0;
   const tor = stopTor ? managedTor : undefined;
   if (stopTor) {
     managedTor = undefined;
@@ -559,6 +596,15 @@ async function installRoute(proxy: SocksProxy, validation: ExitValidation, prese
   activeProxy = proxy;
   activeProxyReference = candidateProxyReference;
   activeValidation = validation;
+  routeActivatedAt = Date.now();
+  lastValidationAt = new Date().toISOString();
+  diagnosticHealth = {
+    status: "healthy",
+    consecutiveFailures: 0,
+    recoveries: diagnosticHealth.recoveries,
+    lastCheckAt: lastValidationAt,
+    lastError: undefined
+  };
   if (!preserveManagedTor) managedTor = undefined;
 
   const obsoleteResources: Promise<unknown>[] = [];
@@ -593,8 +639,20 @@ function startHealthMonitor() {
     async () => {
       if (!activeProxy) throw new Error("No active proxy");
       activeValidation = await validateExit(activeProxy);
+      lastValidationAt = new Date().toISOString();
+      diagnosticHealth.status = "healthy";
+      diagnosticHealth.consecutiveFailures = 0;
+      diagnosticHealth.lastCheckAt = lastValidationAt;
+      diagnosticHealth.lastError = undefined;
     },
-    (failures, error) => logger?.error(`A verificação de saúde da rota falhou (${failures}/2): ${proxyErrorForLog(error, activeProxy)}`),
+    (failures, error) => {
+      const safeError = proxyErrorForLog(error, activeProxy);
+      diagnosticHealth.status = "degraded";
+      diagnosticHealth.consecutiveFailures = failures;
+      diagnosticHealth.lastCheckAt = new Date().toISOString();
+      diagnosticHealth.lastError = diagnosticErrorMessage(error);
+      logger?.error(`A verificação de saúde da rota falhou (${failures}/2): ${safeError}`);
+    },
     async () => { await trackRouteOperation(recoverRoute); },
     { intervalMs: 60_000, failureThreshold: 2 }
   );
@@ -616,6 +674,7 @@ async function performRouteRecovery(): Promise<boolean> {
   shutdownCoordinator.assertRunning();
   if (!activeProxy) return false;
   beginRouteTiming();
+  diagnosticHealth.status = "recovering";
   logger?.info("A rota perdeu a validação. Iniciando recuperação automática.");
   setStatus("recovering", "Recuperando rota…");
   try {
@@ -639,10 +698,19 @@ async function performRouteRecovery(): Promise<boolean> {
       shutdownCoordinator.assertRunning();
     }
     completeRouteTiming();
+    lastValidationAt = new Date().toISOString();
+    diagnosticHealth.status = "healthy";
+    diagnosticHealth.consecutiveFailures = 0;
+    diagnosticHealth.recoveries += 1;
+    diagnosticHealth.lastCheckAt = lastValidationAt;
+    diagnosticHealth.lastError = undefined;
     const discordRunning = monitoredDiscord ? await isDiscordRunning(monitoredDiscord).catch(() => false) : false;
     setStatus(discordRunning ? "discord-running" : "ready", discordRunning ? "Rota ativa" : "Rota ativa. Reinicie o Discord", routeTimingDetail());
     return true;
   } catch (error) {
+    diagnosticHealth.status = "unhealthy";
+    diagnosticHealth.lastCheckAt = new Date().toISOString();
+    diagnosticHealth.lastError = diagnosticErrorMessage(error);
     routeActivationStartedAt = undefined;
     logger?.error(`A recuperação automática da rota falhou: ${proxyErrorForLog(error, activeProxy)}`);
     if (!shutdownCoordinator.isStopping) setStatus("error", "Rota indisponível.", "O Discord não será reiniciado");
@@ -659,6 +727,11 @@ async function ensureHealthyRouteBeforeRestart() {
   setStatus("validating", "Verificando rota…", "O Discord permanecerá aberto");
   try {
     activeValidation = await validateExit(proxyBeingChecked);
+    lastValidationAt = new Date().toISOString();
+    diagnosticHealth.status = "healthy";
+    diagnosticHealth.consecutiveFailures = 0;
+    diagnosticHealth.lastCheckAt = lastValidationAt;
+    diagnosticHealth.lastError = undefined;
     shutdownCoordinator.assertRunning();
     setStatus(previousStatus.phase, previousStatus.message, previousStatus.detail);
     logger?.info("A rota respondeu ao handshake WebSocket do Discord. O reinício pode continuar.");
@@ -748,6 +821,23 @@ async function createWindow() {
   await window.loadURL(UI_ENTRY_URL);
 }
 
+function startDevelopmentUiWatcher() {
+  if (app.isPackaged || !process.argv.includes("--dev-watch") || devUiWatcher) return;
+  const publicDirectory = path.join(app.getAppPath(), "public");
+  devUiWatcher = watch(publicDirectory, { recursive: true }, () => {
+    if (shutdownCoordinator.isStopping) return;
+    if (devUiReloadTimer) clearTimeout(devUiReloadTimer);
+    devUiReloadTimer = setTimeout(() => {
+      devUiReloadTimer = undefined;
+      const window = mainWindow;
+      if (window && !window.isDestroyed()) {
+        logger?.info("Alteração de interface detectada; recarregando somente a janela de desenvolvimento.");
+        window.webContents.reloadIgnoringCache();
+      }
+    }, 250);
+  });
+}
+
 function showWindow() {
   if (shutdownCoordinator.isStopping) return;
   mainWindow?.show();
@@ -774,7 +864,7 @@ function updateTrayMenu() {
       : selectedPreferences?.channel === "canary" ? "Discord Canary"
         : selectedExecutable ? path.parse(selectedExecutable).name : "não selecionado";
   const routeActive = Boolean(activeProxy && pacServer && gatewayRouter);
-  const routeBusy = runtimeStatus.phase === "validating" || runtimeStatus.phase === "recovering";
+  const routeBusy = runtimeStatus.phase === "validating" || runtimeStatus.phase === "restarting" || runtimeStatus.phase === "recovering";
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Abrir GoLiveBack", click: showWindow },
     { label: runtimeStatus.message, icon: trayStatusIcon(runtimeStatus.phase), enabled: false },
@@ -888,6 +978,86 @@ async function detectDiscordInstallations() {
   return { installations, selected: selected ?? null };
 }
 
+async function inspectApplicationSignature(): Promise<Pick<DiagnosticSnapshot["application"], "signature" | "publisher">> {
+  if (!app.isPackaged) return { signature: "development", publisher: null };
+  if (process.platform !== "win32") return { signature: "unknown", publisher: null };
+  try {
+    const metadata = await inspectWindowsExecutable(process.execPath);
+    if (metadata.signatureStatus === "Valid" && metadata.signerSubject) {
+      return { signature: "valid", publisher: metadata.signerSubject };
+    }
+    if (metadata.signatureStatus === "NotSigned") {
+      return { signature: "unsigned", publisher: null };
+    }
+    return { signature: "invalid", publisher: metadata.signerSubject };
+  }
+  catch {
+    return { signature: "unknown", publisher: null };
+  }
+}
+
+async function createDiagnosticSnapshot(): Promise<DiagnosticSnapshot> {
+  const selectedPreferences = preferences?.get();
+  const installations = await availableDiscordInstallations();
+  const configured = selectedPreferences?.discordExecutable?.toLowerCase();
+  const selected = installations.find(item => item.executable.toLowerCase() === configured) ?? installations[0];
+  const discordRunning = selected ? await isDiscordRunning(selected).catch(() => false) : false;
+  const routeActive = Boolean(activeProxy && pacServer && gatewayRouter);
+  const mode = selectedPreferences?.routeMode ?? "tor";
+  const torState = !routeActive || mode !== "tor" ? "inactive" : managedTor ? "integrated" : "external";
+  const applicationSignature = await inspectApplicationSignature();
+  return {
+    generatedAt: new Date().toISOString(),
+    application: {
+      version: app.getVersion(),
+      packaged: app.isPackaged,
+      platform: `${process.platform}-${process.arch}`,
+      ...applicationSignature
+    },
+    route: {
+      phase: runtimeStatus.phase,
+      active: routeActive,
+      mode,
+      uptimeSeconds: routeActivatedAt ? Math.max(0, Math.floor((Date.now() - routeActivatedAt) / 1_000)) : null,
+      startupSeconds: routeStartupDurationMs === undefined ? null : Number((routeStartupDurationMs / 1_000).toFixed(1)),
+      exitCountry: activeValidation?.country ?? null,
+      validationLatencyMs: activeValidation?.latencyMs ?? null,
+      lastValidationAt: lastValidationAt ?? null
+    },
+    services: {
+      tor: torState,
+      pac: Boolean(pacServer),
+      gatewayRouter: Boolean(gatewayRouter),
+      healthMonitor: Boolean(healthMonitor)
+    },
+    discord: {
+      channel: selected?.channel ?? selectedPreferences?.channel ?? "não detectado",
+      version: selected?.version ?? null,
+      selected: Boolean(selected),
+      running: discordRunning
+    },
+    health: {
+      status: diagnosticHealth.status,
+      consecutiveFailures: diagnosticHealth.consecutiveFailures,
+      recoveries: diagnosticHealth.recoveries,
+      lastCheckAt: diagnosticHealth.lastCheckAt ?? null,
+      lastError: diagnosticHealth.lastError ?? null
+    }
+  };
+}
+
+async function createDiagnosticReport() {
+  return formatDiagnosticReport(await createDiagnosticSnapshot());
+}
+
+function copyOutputText(value: unknown) {
+  if (typeof value !== "string" || value.length === 0 || value.length > 64 * 1_024) {
+    throw new Error("O conteúdo exibido não pôde ser copiado.");
+  }
+  clipboard.writeText(value);
+  return { success: true };
+}
+
 async function chooseDiscordExecutable() {
   const configured = preferences?.get().discordExecutable;
   const result = await dialog.showOpenDialog(mainWindow!, {
@@ -911,6 +1081,9 @@ async function launchDiscordInstallation(installation: DiscordInstallation) {
   const pid = await launchDiscord(validated, pacServer.url);
   const label = discordLabel(validated);
   logger?.info(`${label} ${validated.version} foi iniciado com a rota ativa. Processo: ${pid ?? "desconhecido"}.`);
+  setStatus("restarting", "Confirmando inicialização do Discord…", "Aguardando o cliente permanecer estável");
+  await waitForDiscordStability(validated);
+  logger?.info(`${label} permaneceu aberto durante a janela de estabilidade e concluiu o reinício protegido.`);
   setStatus("discord-running", "Rota ativa", routeTimingDetail());
   startProcessMonitor(validated);
   return { success: true, installation: validated, pid, pacUrl: pacServer.url };
@@ -928,9 +1101,10 @@ async function activateGoLive() {
   return activateTorRoute();
 }
 
-async function restartRunningDiscord() {
+async function performDiscordRestart() {
   shutdownCoordinator.assertRunning();
   if (!pacServer || !gatewayRouter || !activeProxy) throw new Error("Ative o GoLive antes de reiniciar o Discord.");
+  const statusBeforeRestart = runtimeStatus;
   const installations = await availableDiscordInstallations();
   let running: DiscordInstallation | undefined;
   for (const installation of installations) {
@@ -947,17 +1121,55 @@ async function restartRunningDiscord() {
   shutdownCoordinator.assertRunning();
   let discordWasStopped = false;
   try {
+    setStatus("restarting", "Validando reinício do Discord…", "O cliente atual permanecerá aberto até a rota ser confirmada");
     await ensureHealthyRouteBeforeRestart();
     shutdownCoordinator.assertRunning();
+    setStatus("restarting", "Encerrando Discord…", "Uma única tentativa protegida está em andamento");
     logger?.info(`${discordLabel(running)} está aberto. Encerrando a aplicação para reaplicar a rota.`);
     await stopDiscord(running);
     discordWasStopped = true;
     await preferences?.update({ channel: running.channel, discordExecutable: running.executable });
+    setStatus("restarting", "Iniciando Discord…", "Aplicando a rota local validada");
     return await launchDiscordInstallation(running);
   } catch (error) {
-    if (discordWasStopped) setStatus("ready", "Rota ativa. Reinicie o Discord", routeTimingDetail());
+    if (discordWasStopped) {
+      logger?.error(`O reinício protegido terminou sem estabilidade: ${errorMessage(error)}. Nenhuma nova tentativa será feita automaticamente.`);
+      setStatus("ready", "Discord não permaneceu aberto", "Use “Abrir sem GoLive” ou tente novamente após o cooldown");
+    } else if (runtimeStatus.phase === "restarting") {
+      setStatus(statusBeforeRestart.phase, statusBeforeRestart.message, statusBeforeRestart.detail);
+    }
     throw error;
   }
+}
+
+async function restartRunningDiscord() {
+  const finish = discordRestartGate.begin();
+  try {
+    return await performDiscordRestart();
+  } finally {
+    finish();
+  }
+}
+
+async function launchDiscordWithoutGoLive() {
+  shutdownCoordinator.assertRunning();
+  if (discordRestartGate.isActive) throw new Error("Aguarde o reinício protegido terminar antes de abrir o Discord diretamente.");
+  const installations = await availableDiscordInstallations();
+  const configured = preferences?.get().discordExecutable?.toLowerCase();
+  const selected = installations.find(item => item.executable.toLowerCase() === configured) ?? installations[0];
+  if (!selected) throw new Error("Nenhuma instalação do Discord foi encontrada.");
+  for (const installation of installations) {
+    if (await isDiscordRunning(installation)) throw new Error("O Discord já está aberto; nenhuma recuperação direta é necessária.");
+  }
+  const validated = await inspectDiscordExecutable(selected.executable);
+  setStatus("restarting", "Desativando a rota…", "Preparando abertura direta do Discord");
+  await stopRoute();
+  logger?.info(`${discordLabel(validated)} será aberto diretamente, sem PAC ou GoLive, por solicitação do usuário.`);
+  const pid = await launchDiscordDirect(validated);
+  setStatus("restarting", "Abrindo Discord sem GoLive…", "Confirmando inicialização direta");
+  await waitForDiscordStability(validated, { stableForMs: 5_000 });
+  setStatus("idle", "Discord aberto sem GoLive", "Ative o GoLive quando quiser preparar uma nova rota");
+  return { success: true, installation: validated, pid };
 }
 
 function startProcessMonitor(installation: DiscordInstallation) {
@@ -993,6 +1205,8 @@ app.whenReady().then(async () => {
   configureSessionSecurity();
   registerUiProtocol();
   handleTrustedIpc("app:status", () => runtimeStatus);
+  handleTrustedIpc("diagnostics:get", createDiagnosticReport);
+  handleTrustedIpc("output:copy", copyOutputText);
   handleTrustedIpc("app:open-log", async () => {
     if (!logger) throw new Error("O arquivo de log ainda não está disponível.");
     await logger.tail();
@@ -1033,6 +1247,7 @@ app.whenReady().then(async () => {
   });
   handleTrustedIpc("app:activate-golive", () => trackRouteOperation(activateGoLive));
   handleTrustedIpc("discord:restart", () => trackRouteOperation(restartRunningDiscord));
+  handleTrustedIpc("discord:launch-direct", () => trackRouteOperation(launchDiscordWithoutGoLive));
   handleTrustedIpc("window:minimize", () => mainWindow?.minimize());
   handleTrustedIpc("window:close", () => mainWindow?.close());
   handleTrustedIpc("route:activate", (proxy: unknown) => trackRouteOperation(() => activateRoute(proxy)));
@@ -1041,6 +1256,7 @@ app.whenReady().then(async () => {
     return { success: true };
   });
   await createWindow();
+  startDevelopmentUiWatcher();
   createTray();
   if (process.argv.includes("--hidden")) {
     mainWindow?.hide();

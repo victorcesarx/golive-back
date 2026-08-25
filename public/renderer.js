@@ -9,6 +9,9 @@ const statusDetail = document.querySelector("#status-detail");
 const statusBadge = document.querySelector("#status-badge");
 const openLog = document.querySelector("#open-log");
 const checkUpdate = document.querySelector("#check-update");
+const showDiagnostics = document.querySelector("#show-diagnostics");
+const copyOutput = document.querySelector("#copy-output");
+const launchDirect = document.querySelector("#launch-direct");
 const discordInstallation = document.querySelector("#discord-installation");
 const discordPath = document.querySelector("#discord-path");
 const chooseDiscord = document.querySelector("#choose-discord");
@@ -23,12 +26,12 @@ const close = document.querySelector("#close");
 const help = document.querySelector("#help");
 const aboutModal = document.querySelector("#about-modal");
 const closeAbout = document.querySelector("#close-about");
-const controls = [activate, restart, openLog, checkUpdate, discordInstallation, chooseDiscord, protectedButton, startWithWindows];
-const badgeByPhase = { idle: "INATIVO", validating: "VALIDANDO", ready: "PRONTO", "discord-running": "PROTEGIDO", recovering: "RECUPERANDO", error: "ATENÇÃO" };
+const controls = [activate, restart, openLog, checkUpdate, showDiagnostics, copyOutput, discordInstallation, chooseDiscord, protectedButton, startWithWindows, launchDirect];
+const badgeByPhase = { idle: "INATIVO", validating: "VALIDANDO", ready: "PRONTO", "discord-running": "PROTEGIDO", restarting: "REINICIANDO", recovering: "RECUPERANDO", error: "ATENÇÃO" };
 const detailByPhase = {
   idle: "Ative o GoLive para criar uma rota", validating: "Validando conexão segura.",
-  ready: "Iniciada em 0 ms", "discord-running": "Iniciada em 0 ms",
-  recovering: "Tentando restabelecer a saída.", error: "Abra o log para ver o que aconteceu."
+  ready: "Conexão persistente · 0,0s", "discord-running": "Conexão persistente · 0,0s",
+  restarting: "Uma única tentativa está em andamento.", recovering: "Tentando restabelecer a saída.", error: "Abra o log para ver o que aconteceu."
 };
 let currentPhase = "idle";
 let busy = false;
@@ -49,13 +52,14 @@ function installationLabel(installation) {
 function applyControlState() {
   for (const element of controls) element.disabled = busy;
   const routeReady = currentPhase === "ready" || currentPhase === "discord-running";
-  const routeChanging = currentPhase === "validating" || currentPhase === "recovering";
+  const routeChanging = currentPhase === "validating" || currentPhase === "restarting" || currentPhase === "recovering";
   activate.disabled = busy || routeChanging;
   protectedButton.disabled = busy || routeChanging;
   protectedButton.classList.toggle("is-active", routeReady);
   protectedButton.title = routeReady ? "Desativar GoLive" : "Ativar GoLive";
   protectedButton.setAttribute("aria-label", routeReady ? "Desativar GoLive" : "Ativar GoLive");
   restart.disabled = busy || !routeReady;
+  launchDirect.disabled = busy || currentPhase === "restarting";
   discordInstallation.disabled = busy || detectedInstallations.length === 0;
   checkUpdate.disabled = busy || checkingUpdate;
   protectedButton.setAttribute("aria-busy", String(busy));
@@ -67,7 +71,11 @@ function renderStatus(value) {
   statusMessage.textContent = value.message;
   statusDetail.textContent = value.detail ?? detailByPhase[value.phase] ?? "Estado atualizado.";
   statusBadge.textContent = badgeByPhase[value.phase] ?? "ESTADO";
-  protectedLabel.textContent = value.phase === "ready" || value.phase === "discord-running" ? "GoLive ativo" : value.phase === "validating" ? "Ativando GoLive…" : "Ativar GoLive";
+  protectedLabel.textContent = value.phase === "ready" || value.phase === "discord-running" ? "GoLive ativo"
+    : value.phase === "validating" ? "Ativando GoLive…"
+      : value.phase === "restarting" ? "GoLive ativo"
+      : value.phase === "recovering" ? "Recuperando…"
+        : "Ativar GoLive";
   applyControlState();
 }
 
@@ -100,6 +108,7 @@ function showOutput(text, kind = "") {
   output.classList.remove("success", "error");
   if (kind) output.classList.add(kind);
   output.textContent = text;
+  copyOutput.hidden = false;
 }
 
 function clearProxyField() {
@@ -193,12 +202,27 @@ activate.addEventListener("click", async () => {
 });
 restart.addEventListener("click", async () => {
   setBusy(true);
+  launchDirect.hidden = true;
   try {
     await window.gatewayRoute.restartDiscord();
+    showOutput("Discord reiniciado e confirmado como estável com a rota ativa.", "success");
   } catch (error) {
     advancedSettings.open = true;
-    showOutput(`O Discord não foi reiniciado.\n\n${readableError(error)}\n\nSua sessão atual foi preservada. Aguarde a rota ficar disponível e tente novamente.`, "error");
+    launchDirect.hidden = false;
+    showOutput(`O reinício protegido não foi concluído.\n\n${readableError(error)}\n\nO GoLiveBack não fará outra tentativa automaticamente. Se o Discord estiver fechado, você pode abri-lo sem a rota.`, "error");
     window.requestAnimationFrame(updateScrollIndicator);
+  } finally {
+    setBusy(false);
+  }
+});
+launchDirect.addEventListener("click", async () => {
+  setBusy(true);
+  try {
+    await window.gatewayRoute.launchDiscordDirect();
+    launchDirect.hidden = true;
+    showOutput("Discord aberto diretamente, sem GoLive. A rota foi desativada com segurança.", "success");
+  } catch (error) {
+    showOutput(`Não foi possível abrir o Discord diretamente.\n\n${readableError(error)}`, "error");
   } finally {
     setBusy(false);
   }
@@ -218,6 +242,33 @@ openLog.addEventListener("click", async () => {
     openLog.textContent = originalLabel;
   } finally {
     openLog.disabled = false;
+  }
+});
+showDiagnostics.addEventListener("click", async () => {
+  setBusy(true);
+  try {
+    showOutput(await window.gatewayRoute.getDiagnostics());
+    window.requestAnimationFrame(updateScrollIndicator);
+  } catch (error) {
+    showOutput(`Não foi possível gerar o diagnóstico.\n\n${readableError(error)}`, "error");
+  } finally {
+    setBusy(false);
+  }
+});
+copyOutput.addEventListener("click", async () => {
+  copyOutput.disabled = true;
+  try {
+    await window.gatewayRoute.copyOutput(output.textContent);
+    copyOutput.setAttribute("aria-label", "Conteúdo copiado");
+    copyOutput.title = "Copiado ✓";
+    window.setTimeout(() => {
+      copyOutput.setAttribute("aria-label", "Copiar conteúdo");
+      copyOutput.title = "Copiar conteúdo";
+    }, 1_600);
+  } catch (error) {
+    showOutput(`Não foi possível copiar o conteúdo.\n\n${readableError(error)}`, "error");
+  } finally {
+    copyOutput.disabled = false;
   }
 });
 checkUpdate.addEventListener("click", async () => {

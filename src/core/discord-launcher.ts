@@ -12,6 +12,14 @@ export interface DiscordProcessController {
   stop(executable: string): Promise<number[]>;
 }
 
+export interface DiscordStabilityOptions {
+  stableForMs?: number;
+  pollIntervalMs?: number;
+  controller?: DiscordProcessController;
+  sleep?: (milliseconds: number) => Promise<void>;
+  now?: () => number;
+}
+
 const windowsProcessController: DiscordProcessController = {
   list: listWindowsProcessesByExecutable,
   stop: stopWindowsProcessesByExecutable
@@ -52,11 +60,11 @@ export async function stopDiscord(
   throw new Error(`Discord ${discordProcessName(installation)} did not close in time`);
 }
 
-export async function launchDiscord(installation: DiscordInstallation, pacUrl: string): Promise<number | undefined> {
+async function spawnDiscord(installation: DiscordInstallation, arguments_: string[]): Promise<number | undefined> {
   if (await isDiscordRunning(installation)) {
     throw new Error("Discord is already running. Quit it from the system tray and try again.");
   }
-  const child = spawn(installation.executable, discordLaunchArguments(pacUrl), {
+  const child = spawn(installation.executable, arguments_, {
     detached: true,
     stdio: "ignore",
     windowsHide: false
@@ -67,4 +75,33 @@ export async function launchDiscord(installation: DiscordInstallation, pacUrl: s
   });
   child.unref();
   return child.pid;
+}
+
+export function launchDiscord(installation: DiscordInstallation, pacUrl: string): Promise<number | undefined> {
+  return spawnDiscord(installation, discordLaunchArguments(pacUrl));
+}
+
+export function launchDiscordDirect(installation: DiscordInstallation): Promise<number | undefined> {
+  return spawnDiscord(installation, []);
+}
+
+export async function waitForDiscordStability(
+  installation: DiscordInstallation,
+  options: DiscordStabilityOptions = {}
+): Promise<void> {
+  const stableForMs = options.stableForMs ?? 8_000;
+  const pollIntervalMs = options.pollIntervalMs ?? 500;
+  const controller = options.controller ?? windowsProcessController;
+  const sleep = options.sleep ?? (milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)));
+  const now = options.now ?? Date.now;
+  const deadline = now() + stableForMs;
+  while (now() < deadline) {
+    if (!await isDiscordRunning(installation, controller)) {
+      throw new Error("O Discord encerrou durante a inicialização protegida.");
+    }
+    await sleep(Math.min(pollIntervalMs, Math.max(0, deadline - now())));
+  }
+  if (!await isDiscordRunning(installation, controller)) {
+    throw new Error("O Discord encerrou antes de concluir a inicialização protegida.");
+  }
 }

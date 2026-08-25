@@ -79,6 +79,9 @@ async function handleClient(client: Socket, connector: UpstreamConnector, socket
   upstream.once("error", closeBoth);
   client.once("close", () => upstream.destroy());
   upstream.once("close", () => client.destroy());
+  client.setTimeout(0);
+  client.setKeepAlive(true);
+  upstream.setKeepAlive(true);
   reply(client, 0);
   const buffered = reader.release();
   if (buffered.length > 0) upstream.write(buffered);

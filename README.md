@@ -1,6 +1,6 @@
 # GoLiveBack
 
-[Baixar versão portátil 1.16.0](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Portable-1.16.0-x64.exe) · [Baixar instalador 1.16.0](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Setup-1.16.0-x64.exe)
+[Baixar versão portátil 1.17.1](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Portable-1.17.1-x64.exe) · [Baixar instalador 1.17.1](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Setup-1.17.1-x64.exe)
 
 Aplicativo Windows independente que devolve o Go Live e a câmera no Discord Desktop criando uma rota externa apenas para os WebSockets de gateway. Não instala Vencord, não injeta JavaScript e não modifica os arquivos internos do Discord.
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { connect } from "node:net";
+import { connect, createServer } from "node:net";
 import test from "node:test";
 import { startGatewayRouter } from "./gateway-router.js";
 import { SocketReader } from "./socket-reader.js";
@@ -57,6 +57,39 @@ test("router accepts an allowlisted gateway on port 443", async () => {
     assert.equal(destination, "gateway.discord.gg:443");
   } finally {
     await router.close();
+  }
+});
+
+test("router keeps an established gateway connection alive while idle", async () => {
+  const upstreamServer = createServer(socket => socket.pipe(socket));
+  upstreamServer.listen(0, "127.0.0.1");
+  await once(upstreamServer, "listening");
+  const upstreamAddress = upstreamServer.address();
+  if (!upstreamAddress || typeof upstreamAddress === "string") throw new Error("Upstream test server did not expose a TCP port");
+
+  const router = await startGatewayRouter(async () => {
+    const socket = connect({ host: "127.0.0.1", port: upstreamAddress.port });
+    await once(socket, "connect");
+    return socket;
+  }, { handshakeTimeoutMs: 25 });
+  const client = await openClient(router.port);
+  const reader = new SocketReader(client);
+  try {
+    client.write(Buffer.from([5, 1, 0]));
+    assert.deepEqual(await reader.read(2), Buffer.from([5, 0]));
+    const host = Buffer.from("gateway.discord.gg");
+    client.write(Buffer.concat([Buffer.from([5, 1, 0, 3, host.length]), host, Buffer.from([1, 187])]));
+    assert.equal((await reader.read(10))[1], 0);
+
+    await new Promise(resolve => setTimeout(resolve, 75));
+    assert.equal(client.destroyed, false);
+    client.write(Buffer.from("still-connected"));
+    assert.equal((await reader.read(15)).toString(), "still-connected");
+  } finally {
+    client.destroy();
+    await router.close();
+    upstreamServer.close();
+    await once(upstreamServer, "close");
   }
 });
 

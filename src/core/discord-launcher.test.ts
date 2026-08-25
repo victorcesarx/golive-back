@@ -5,6 +5,7 @@ import {
   discordProcessName,
   isDiscordRunning,
   stopDiscord,
+  waitForDiscordStability,
   type DiscordProcessController
 } from "./discord-launcher.js";
 
@@ -13,6 +14,47 @@ test("builds a PAC argument only for a loopback HTTP URL", () => {
     "--proxy-pac-url=http://127.0.0.1:32100/proxy-a.pac"
   ]);
   assert.throws(() => discordLaunchArguments("https://example.com/proxy.pac"), /loopback/);
+});
+
+test("confirms that Discord remains alive for the stability window", async () => {
+  const installation = { channel: "stable" as const, version: "1", root: "C:\\Discord", executable: "C:\\Discord\\Discord.exe" };
+  let now = 0;
+  let checks = 0;
+  const controller: DiscordProcessController = {
+    async list(executable) {
+      checks += 1;
+      return [{ pid: 42, executable }];
+    },
+    async stop() { return []; }
+  };
+  await waitForDiscordStability(installation, {
+    stableForMs: 1_000,
+    pollIntervalMs: 250,
+    controller,
+    now: () => now,
+    sleep: async milliseconds => { now += milliseconds; }
+  });
+  assert.equal(checks, 5);
+});
+
+test("rejects a Discord process that exits during protected startup", async () => {
+  const installation = { channel: "stable" as const, version: "1", root: "C:\\Discord", executable: "C:\\Discord\\Discord.exe" };
+  let now = 0;
+  let checks = 0;
+  const controller: DiscordProcessController = {
+    async list(executable) {
+      checks += 1;
+      return checks < 3 ? [{ pid: 42, executable }] : [];
+    },
+    async stop() { return []; }
+  };
+  await assert.rejects(waitForDiscordStability(installation, {
+    stableForMs: 1_000,
+    pollIntervalMs: 250,
+    controller,
+    now: () => now,
+    sleep: async milliseconds => { now += milliseconds; }
+  }), /encerrou durante/i);
 });
 
 test("maps every Discord channel to its Windows process", () => {

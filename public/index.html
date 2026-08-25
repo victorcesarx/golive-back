@@ -58,14 +58,18 @@
       .lead { margin: 0 0 10px; color: var(--text-secondary); font-size: 13px; line-height: 18px; }
       .status-card { position: relative; height: 64px; min-height: 64px; max-height: 64px; display: grid; grid-template-columns: 9px minmax(0, 1fr); grid-template-rows: auto auto; align-content: center; align-items: center; column-gap: 7px; row-gap: 2px; padding: 6px 104px 6px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-content); }
       .status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-disabled); box-shadow: 0 0 0 3px var(--neutral-surface); }
+      .status-card[data-phase="ready"], .status-card[data-phase="discord-running"] { border-color: var(--success-state-border); background: linear-gradient(90deg, var(--success-surface), var(--bg-content) 72%); }
       .status-card[data-phase="ready"] .status-dot, .status-card[data-phase="discord-running"] .status-dot { background: var(--success); box-shadow: 0 0 0 3px var(--success-surface); }
-      .status-card[data-phase="validating"] .status-dot, .status-card[data-phase="recovering"] .status-dot { background: var(--warning); box-shadow: 0 0 0 3px var(--warning-surface); }
+      .status-card[data-phase="validating"] .status-dot, .status-card[data-phase="restarting"] .status-dot, .status-card[data-phase="recovering"] .status-dot { background: var(--warning); box-shadow: 0 0 0 3px var(--warning-surface); }
       .status-card[data-phase="error"] .status-dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-surface); }
       #status-message { margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; line-height: 16px; overflow-wrap: anywhere; }
-      #status-detail { grid-column: 1 / -1; margin: 0; color: var(--text-muted); font-size: 10px; line-height: 13px; overflow-wrap: anywhere; }
+      .status-detail-row { grid-column: 1 / -1; min-width: 0; display: flex; align-items: center; gap: 4px; }
+      #status-detail { min-width: 0; margin: 0; color: var(--text-muted); font-size: 10px; line-height: 13px; overflow-wrap: anywhere; }
+      .status-pulse { display: none; flex: 0 0 auto; width: 13px; height: 13px; fill: none; stroke: var(--success); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 3px var(--success)); }
+      .status-card[data-phase="ready"] .status-pulse, .status-card[data-phase="discord-running"] .status-pulse { display: block; }
       .badge { position: absolute; top: 50%; right: 9px; width: 86px; height: 22px; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; border: 1px solid var(--neutral-state-border); border-radius: var(--radius-pill); background: var(--neutral-surface); color: var(--text-secondary); font-size: 10px; font-weight: 700; line-height: 1; letter-spacing: .04em; text-align: center; transform: translateY(-50%); }
       .status-card[data-phase="ready"] .badge, .status-card[data-phase="discord-running"] .badge { border-color: var(--success-state-border); color: var(--success); background: var(--success-surface); }
-      .status-card[data-phase="validating"] .badge, .status-card[data-phase="recovering"] .badge { border-color: var(--warning-state-border); color: var(--warning); background: var(--warning-surface); }
+      .status-card[data-phase="validating"] .badge, .status-card[data-phase="restarting"] .badge, .status-card[data-phase="recovering"] .badge { border-color: var(--warning-state-border); color: var(--warning); background: var(--warning-surface); }
       .status-card[data-phase="error"] .badge { border-color: var(--danger-state-border); color: var(--danger); background: var(--danger-surface); }
       .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
       .primary-action, .restart-action { width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: var(--radius-md); cursor: pointer; font-size: 12px; font-weight: 700; }
@@ -111,11 +115,18 @@
       .secondary-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
       .secondary-actions button { min-height: 34px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: var(--bg-elevated); cursor: pointer; font-size: 12px; font-weight: 600; }
       .secondary-actions button:hover { background: var(--bg-hover); }
+      .recovery-action { width: 100%; min-height: 34px; margin-top: 8px; border: 1px solid var(--warning-state-border); border-radius: var(--radius-sm); color: var(--warning); background: var(--warning-surface); cursor: pointer; font-size: 12px; font-weight: 700; }
+      .recovery-action:hover { border-color: var(--warning); }
       button:disabled, select:disabled, input:disabled { opacity: .58; cursor: wait; }
-      pre { display: none; max-height: 160px; margin: 12px 0 0; padding: 12px; overflow: auto; border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-secondary); background: var(--bg-elevated); box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%); font: 11px/16px var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+      .output-shell { position: relative; }
+      pre { display: none; max-height: 160px; margin: 12px 0 0; padding: 12px 42px 12px 12px; overflow: auto; border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-secondary); background: var(--bg-elevated); box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%); font: 11px/16px var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
       pre.visible { display: block; }
       pre.success { border-color: rgb(53 201 135 / 55%); }
       pre.error { border-color: rgb(232 90 104 / 60%); }
+      .copy-output { position: absolute; top: 19px; right: 7px; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--radius-sm); color: var(--text-muted); background: var(--bg-content); cursor: pointer; }
+      .copy-output:hover { color: var(--text-primary); background: var(--bg-hover); }
+      .copy-output svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+      .copy-output[hidden] { display: none; }
       #scroll-indicator { position: fixed; z-index: 30; right: 10px; bottom: calc(var(--footer-height) + 10px); width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid rgb(157 168 255 / 45%); border-radius: 50%; color: white; background: var(--primary-500); box-shadow: 0 6px 18px rgb(0 0 0 / 28%); cursor: pointer; }
       #scroll-indicator[hidden] { display: none; }
       #scroll-indicator:hover { background: var(--primary-600); }
@@ -166,7 +177,10 @@
         <span class="status-dot" aria-hidden="true"></span>
         <p id="status-message">Pronto para iniciar.</p>
         <span id="status-badge" class="badge">INATIVO</span>
-        <p id="status-detail">Ative o GoLive para criar uma rota</p>
+        <div class="status-detail-row">
+          <svg class="status-pulse" viewBox="0 0 16 14" aria-hidden="true"><path d="M1 7h3l1.5-4 3 8 2-4H15"/></svg>
+          <p id="status-detail">Ative o GoLive para criar uma rota</p>
+        </div>
       </section>
       <div class="action-row">
         <button id="protected" class="primary-action" type="button">
@@ -202,9 +216,16 @@
           <p class="proxy-warning">Proxy remota com login: usuário e senha SOCKS5 podem trafegar sem criptografia até o servidor. Prefira uma proxy local ou um túnel protegido.</p>
           <div class="secondary-actions">
             <button id="open-log" type="button">Abrir log</button>
+            <button id="show-diagnostics" type="button">Diagnóstico</button>
             <button id="check-update" type="button" aria-live="polite">Verificar atualização</button>
           </div>
-          <pre id="output">Aguardando diagnóstico…</pre>
+          <div class="output-shell">
+            <pre id="output">Aguardando diagnóstico…</pre>
+            <button id="copy-output" class="copy-output" type="button" aria-label="Copiar conteúdo" title="Copiar conteúdo" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+            </button>
+          </div>
+          <button id="launch-direct" class="recovery-action" type="button" hidden>Abrir Discord sem GoLive</button>
         </div>
       </details>
     </main>
