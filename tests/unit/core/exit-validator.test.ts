@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findTorExit, isDiscordWebSocketUpgrade, parseCloudflareTrace } from "./exit-validator.js";
+import { findTorExit, isDiscordWebSocketUpgrade, parseCloudflareTrace } from "../../../src/core/exit-validator.js";
 
 test("parses country and IP from a Cloudflare trace", () => {
   const response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nfl=1\nip=203.0.113.7\nloc=DE\ntls=TLSv1.3\n";

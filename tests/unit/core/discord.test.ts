@@ -3,8 +3,8 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { classifyDiscordExecutable, discoverDiscord, inspectDiscordExecutable } from "./discord.js";
-import type { WindowsExecutableMetadata } from "./windows-executable.js";
+import { classifyDiscordExecutable, discoverDiscord, inspectDiscordExecutable } from "../../../src/core/discord.js";
+import type { WindowsExecutableMetadata } from "../../../src/core/windows-executable.js";
 
 function metadata(overrides: Partial<WindowsExecutableMetadata> = {}): WindowsExecutableMetadata {
   return {

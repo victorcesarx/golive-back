@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HealthMonitor } from "./health-monitor.js";
+import { HealthMonitor } from "../../../src/core/health-monitor.js";
 
 test("health monitor recovers only after the configured failure threshold", async () => {
   let recoveries = 0;

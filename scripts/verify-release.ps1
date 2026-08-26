@@ -9,6 +9,18 @@ $resolvedDirectory = (Resolve-Path -LiteralPath $ReleaseDirectory).Path
 $checksumsPath = Join-Path $resolvedDirectory "SHA256SUMS.txt"
 $manifestPath = Join-Path $resolvedDirectory "release-manifest.json"
 
+function Get-Sha256([string]$Path) {
+  $stream = [System.IO.File]::OpenRead($Path)
+  $algorithm = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([System.BitConverter]::ToString($algorithm.ComputeHash($stream)) -replace '-', '')
+  }
+  finally {
+    $algorithm.Dispose()
+    $stream.Dispose()
+  }
+}
+
 if (-not $ExpectedCertificateThumbprint) {
   throw "Defina GOLIVEBACK_CERTIFICATE_THUMBPRINT com o thumbprint do certificado oficial."
 }
@@ -76,7 +88,7 @@ foreach ($entry in $manifest.artifacts) {
     throw "Artefato ausente: '$($entry.file)'."
   }
 
-  $actualHash = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash.ToUpperInvariant()
+  $actualHash = Get-Sha256 $artifactPath
   if ($actualHash -ne $entry.sha256.ToUpperInvariant()) {
     throw "SHA-256 divergente no manifesto para '$($entry.file)'."
   }
@@ -91,7 +103,7 @@ if (-not $executables) {
 }
 
 foreach ($executable in $executables) {
-  $executableHash = (Get-FileHash -LiteralPath $executable.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+  $executableHash = Get-Sha256 $executable.FullName
   $signature = Get-AuthenticodeSignature -LiteralPath $executable.FullName
   if ($signature.Status -ne "Valid" -or -not $signature.SignerCertificate) {
     throw "Assinatura Authenticode invalida em '$($executable.Name)': $($signature.Status) $($signature.StatusMessage)"

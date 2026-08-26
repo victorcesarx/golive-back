@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { connect, createServer } from "node:net";
 import test from "node:test";
-import { startGatewayRouter } from "./gateway-router.js";
-import { SocketReader } from "./socket-reader.js";
+import { startGatewayRouter } from "../../../src/core/gateway-router.js";
+import { SocketReader } from "../../../src/core/socket-reader.js";
 
 async function request(port: number, host: string) {
   const socket = connect({ host: "127.0.0.1", port });

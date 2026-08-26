@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveStartupCommand, resolveValidatedStartupCommand } from "./startup.js";
-import type { WindowsExecutableMetadata } from "./windows-executable.js";
+import { resolveStartupCommand, resolveValidatedStartupCommand } from "../../../src/core/startup.js";
+import type { WindowsExecutableMetadata } from "../../../src/core/windows-executable.js";
 
 function metadata(executable: string, overrides: Partial<WindowsExecutableMetadata> = {}): WindowsExecutableMetadata {
   return {

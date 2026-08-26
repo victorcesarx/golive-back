@@ -7,7 +7,7 @@ import {
   stopDiscord,
   waitForDiscordStability,
   type DiscordProcessController
-} from "./discord-launcher.js";
+} from "../../../src/core/discord-launcher.js";
 
 test("builds a PAC argument only for a loopback HTTP URL", () => {
   assert.deepEqual(discordLaunchArguments("http://127.0.0.1:32100/proxy-a.pac"), [

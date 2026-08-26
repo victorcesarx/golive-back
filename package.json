@@ -1,6 +1,6 @@
 {
   "name": "goliveback",
-  "version": "1.17.1",
+  "version": "1.17.2",
   "private": true,
   "packageManager": "pnpm@10.34.5",
   "type": "module",
@@ -14,12 +14,12 @@
   "homepage": "https://github.com/victorcesarx/golive-back#readme",
   "main": "dist/main.js",
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && tsc",
+    "build": "node scripts/clean-build.mjs && tsc --project tsconfig.json",
     "icons:generate": "electron scripts/generate-icons.mjs",
     "dev": "node scripts/dev-watch.mjs",
     "dev:once": "pnpm build && electron .",
     "start": "electron .",
-    "test": "pnpm build && node --test dist/**/*.test.js",
+    "test": "pnpm build && tsc --project tsconfig.test.json && node --test .tmp/test-dist/tests/unit/**/*.test.js",
     "verify:tor": "node scripts/verify-tor-bundle.mjs",
     "security:secrets": "node scripts/scan-secrets.mjs",
     "security:check": "pnpm test && pnpm audit --audit-level high && pnpm verify:tor && pnpm security:secrets",
@@ -29,7 +29,11 @@
     "metrics:build": "node scripts/write-build-metrics.mjs",
     "package:win": "pnpm build && electron-builder --win portable",
     "signing:preflight": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-signing-readiness.ps1",
+    "updates:keygen": "node scripts/generate-update-key.mjs",
+    "updates:sign": "node scripts/sign-update-manifest.mjs",
+    "updates:verify": "node scripts/verify-update-release.mjs",
     "release:win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release-windows.ps1",
+    "release:personal": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release-personal.ps1",
     "verify:release": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-release.ps1"
   },
   "devDependencies": {
@@ -63,7 +67,6 @@
     },
     "files": [
       "dist/**",
-      "!dist/**/*.test.js",
       "public/**",
       "assets/app-icon.png",
       "assets/tray-icon.png",

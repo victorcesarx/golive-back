@@ -9,9 +9,22 @@ $resolvedDirectory = (Resolve-Path -LiteralPath $ReleaseDirectory).Path
 $manifestPath = Join-Path $resolvedDirectory "release-manifest.json"
 $checksumsPath = Join-Path $resolvedDirectory "SHA256SUMS.txt"
 
+function Get-Sha256([string]$Path) {
+  $stream = [System.IO.File]::OpenRead($Path)
+  $algorithm = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([System.BitConverter]::ToString($algorithm.ComputeHash($stream)) -replace '-', '')
+  }
+  finally {
+    $algorithm.Dispose()
+    $stream.Dispose()
+  }
+}
+
 $artifacts = Get-ChildItem -LiteralPath $resolvedDirectory -File |
   Where-Object {
     $_.Name -ne "release-manifest.json" -and
+    $_.Name -ne "release-manifest.sig" -and
     $_.Name -ne "SHA256SUMS.txt" -and
     ($_.Extension -in ".exe", ".blockmap" -or
       $_.Name -eq "latest.yml" -or
@@ -27,7 +40,7 @@ if (-not $artifacts) {
 
 $entries = @(
   foreach ($artifact in $artifacts) {
-    $hash = (Get-FileHash -LiteralPath $artifact.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+    $hash = Get-Sha256 $artifact.FullName
     [ordered]@{
       file = $artifact.Name
       bytes = $artifact.Length
@@ -46,6 +59,8 @@ $manifest = [ordered]@{
   commit = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else { $null }
   artifacts = @($entries)
 }
-$manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding utf8
+$manifestJson = $manifest | ConvertTo-Json -Depth 5
+$utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($manifestPath, $manifestJson + [Environment]::NewLine, $utf8WithoutBom)
 
 Write-Host "Manifesto criado para $($entries.Count) artefato(s): $checksumsPath"

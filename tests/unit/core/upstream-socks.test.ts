@@ -9,7 +9,7 @@ import {
   isLoopbackSocksProxy,
   parseSocksProxy,
   requiresRemoteSocksCredentialWarning
-} from "./upstream-socks.js";
+} from "../../../src/core/upstream-socks.js";
 
 test("parses an authenticated SOCKS5 proxy", () => {
   assert.deepEqual(parseSocksProxy("socks5://user:p%40ss@proxy.example:1080"), {

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { PreferenceStore } from "./preferences.js";
+import { PreferenceStore } from "../../../src/core/preferences.js";
 
 test("preferences persist the selected Discord executable and safe route values", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "goliveback-prefs-"));

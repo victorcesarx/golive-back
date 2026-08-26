@@ -3,7 +3,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { AppLogger } from "./logger.js";
+import { AppLogger } from "../../../src/core/logger.js";
 
 test("logger redacts SOCKS credentials", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "goliveback-test-"));

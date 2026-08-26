@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const cleanScript = path.join(projectRoot, "scripts", "clean-dist.mjs");
+const cleanScript = path.join(projectRoot, "scripts", "clean-build.mjs");
 const typeScriptCompiler = path.join(projectRoot, "node_modules", "typescript", "bin", "tsc");
 const electronExecutable = path.join(
   projectRoot,

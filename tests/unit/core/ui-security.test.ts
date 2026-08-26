@@ -7,7 +7,7 @@ import {
   navigationTargetForLog,
   resolveUiResource,
   UI_ENTRY_URL
-} from "./ui-security.js";
+} from "../../../src/core/ui-security.js";
 
 test("accepts only the exact trusted renderer document", () => {
   assert.equal(isTrustedRendererUrl(UI_ENTRY_URL), true);

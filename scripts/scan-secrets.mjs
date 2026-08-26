@@ -8,6 +8,7 @@ const tracked = execFileSync("git", ["-c", `safe.directory=${projectRoot.replace
   .split("\0")
   .filter(Boolean);
 const forbiddenNames = /(?:^|\/)(?:\.env(?:\..+)?|[^/]+\.(?:p12|pfx|pvk|pem|key))$/i;
+const allowedPublicKeyFiles = new Set(["assets/update-public.pem"]);
 const patterns = [
   { name: "private key", expression: /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/ },
   { name: "GitHub token", expression: /\bgh[pousr]_[A-Za-z0-9]{30,}\b/ },
@@ -20,7 +21,7 @@ const findings = [];
 
 for (const relative of tracked) {
   const normalized = relative.replaceAll("\\", "/");
-  if (forbiddenNames.test(normalized)) {
+  if (forbiddenNames.test(normalized) && !allowedPublicKeyFiles.has(normalized)) {
     findings.push(`${normalized}: arquivo sensível versionado`);
     continue;
   }

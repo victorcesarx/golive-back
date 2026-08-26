@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ShutdownCoordinator, type ShutdownReason } from "./shutdown-coordinator.js";
+import { ShutdownCoordinator, type ShutdownReason } from "../../../src/core/shutdown-coordinator.js";
 
 test("shutdown is idempotent and blocks new operations immediately", async () => {
   let releaseCleanup!: () => void;

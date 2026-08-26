@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkProjectUpdate, compareVersions, PROJECT_RELEASE_API_URL } from "./update-checker.js";
+import { checkProjectUpdate, compareVersions, PROJECT_RELEASE_API_URL } from "../../../src/core/update-checker.js";
 
 test("compares stable and prerelease semantic versions", () => {
   assert.equal(compareVersions("1.16.0", "v1.17.0"), -1);

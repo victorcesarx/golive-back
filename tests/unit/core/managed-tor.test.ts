@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import test from "node:test";
-import { managedTorArguments, stopManagedProcess, waitForTorBootstrap } from "./managed-tor.js";
+import { managedTorArguments, stopManagedProcess, waitForTorBootstrap } from "../../../src/core/managed-tor.js";
 
 function spawnNode(source: string) {
   return spawn(process.execPath, ["-e", source], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });

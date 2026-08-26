@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatDiagnosticReport, type DiagnosticSnapshot } from "./diagnostics.js";
+import { formatDiagnosticReport, type DiagnosticSnapshot } from "../../../src/core/diagnostics.js";
 
 test("formats a useful diagnostic report without paths, ports or exit IP", () => {
   const snapshot: DiagnosticSnapshot = {

@@ -83,6 +83,13 @@
       .restart-action:hover { border-color: var(--primary-500); background: var(--bg-hover); }
       .restart-action:disabled { border-color: var(--border-subtle); color: var(--text-disabled); background: var(--bg-content); cursor: not-allowed; }
       .primary-action svg, .restart-action svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+      .usage-reminder { width: 100%; min-height: 34px; margin-top: 8px; padding: 7px 10px; border: 1px solid var(--warning-state-border); border-radius: var(--radius-md); color: var(--warning); background: var(--warning-surface); cursor: pointer; text-align: left; }
+      .usage-reminder:hover { border-color: var(--warning); background: var(--bg-hover); }
+      .usage-reminder[hidden] { display: none; }
+      .usage-reminder-title { display: block; font-size: 13px; font-weight: 700; line-height: 18px; text-align: center; }
+      .usage-reminder-copy { display: none; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--warning-state-border); color: var(--text-secondary); font-size: 12px; font-weight: 400; line-height: 18px; }
+      .usage-reminder-copy + .usage-reminder-copy { margin-top: 7px; padding-top: 0; border-top: 0; }
+      .usage-reminder[aria-expanded="true"] .usage-reminder-copy { display: block; }
       .preference { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 38px; color: var(--text-secondary); font-size: 12px; }
       .switch { position: relative; width: 36px; height: 20px; flex: 0 0 auto; }
       .switch input { position: absolute; opacity: 0; pointer-events: none; }
@@ -190,6 +197,11 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 8a7 7 0 0 1 11.2-1.4L20 9M4 15l2.7 2.4A7 7 0 0 0 17.9 16"/></svg><span>Reiniciar Discord</span>
         </button>
       </div>
+      <button id="usage-reminder" class="usage-reminder" type="button" aria-expanded="false" hidden>
+        <span class="usage-reminder-title">Go Live ou câmera não estão funcionando?</span>
+        <span class="usage-reminder-copy">Mesmo com o GoLiveBack aberto e uma rota ativa, o Discord pode precisar reaplicar a conexão depois que o Go Live ou a câmera ficam algum tempo sem uso.</span>
+        <span class="usage-reminder-copy">Se esses recursos não funcionarem corretamente — por exemplo, ficarem carregando ou apresentarem erro ao transmitir — mantenha a rota ativa e use <strong>Reiniciar Discord</strong> novamente.</span>
+      </button>
       <label class="preference">
         <span class="switch"><input id="startWithWindows" type="checkbox"><span class="switch-track"></span></span><span>Ativar GoLive com o Windows</span>
       </label>

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, session, shell, Tray, type IpcMainInvokeEvent } from "electron";
+import { spawn } from "node:child_process";
 import { watch, type FSWatcher } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -25,7 +26,7 @@ import { resolveValidatedStartupCommand } from "./core/startup.js";
 import { redactSensitiveText } from "./core/sensitive-data.js";
 import { ShutdownCoordinator, type ShutdownReason } from "./core/shutdown-coordinator.js";
 import { inspectWindowsExecutable } from "./core/windows-executable.js";
-import { checkProjectUpdate, PROJECT_LATEST_RELEASE_URL } from "./core/update-checker.js";
+import { checkSecureUpdate, downloadVerifiedUpdate } from "./core/secure-update.js";
 import {
   isTrustedIpcSender,
   isTrustedRendererUrl,
@@ -122,6 +123,7 @@ const TRAY_STATUS_ICON_DATA: Record<TrayStatusKind, string> = {
   error: "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACpSURBVDhPYxgF+MH9+HiO59HpDiD8Pj5fACpMHHgemVHxIjLj+4uojP8InN4OMhSqBDd4HpnegKoRCUdmzIcqww5ehmZJYNqMip9GpmlAlWOCF5GZAdg0oeCIjAKockzwPCo9AasmJAwKH6hyTAByHjZNyBgUK1Dl2AEwtJdj0wjCwAA+DlWGG4DiHKh4OzbNz8PTFaDKCANwIgJGKThagYELFR5UgIEBAPn4wLa9I+54AAAAAElFTkSuQmCC"
 };
 const trayStatusIconCache = new Map<TrayStatusKind, ReturnType<typeof nativeImage.createFromDataURL>>();
+let trayMenuAppIcon: ReturnType<typeof nativeImage.createFromPath> | undefined;
 
 interface RuntimeStatus {
   phase: AppPhase;
@@ -855,6 +857,13 @@ function trayStatusIcon(phase: AppPhase) {
   return icon;
 }
 
+function applicationTrayMenuIcon() {
+  trayMenuAppIcon ??= nativeImage
+    .createFromPath(path.join(app.getAppPath(), "assets", "tray-icon.png"))
+    .resize({ width: 16, height: 16, quality: "best" });
+  return trayMenuAppIcon;
+}
+
 function updateTrayMenu() {
   if (!tray) return;
   const selectedPreferences = preferences?.get();
@@ -866,7 +875,7 @@ function updateTrayMenu() {
   const routeActive = Boolean(activeProxy && pacServer && gatewayRouter);
   const routeBusy = runtimeStatus.phase === "validating" || runtimeStatus.phase === "restarting" || runtimeStatus.phase === "recovering";
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Abrir GoLiveBack", click: showWindow },
+    { label: "Abrir GoLiveBack", icon: applicationTrayMenuIcon(), click: showWindow },
     { label: runtimeStatus.message, icon: trayStatusIcon(runtimeStatus.phase), enabled: false },
     { type: "separator" },
     { label: `Build: ${selectedLabel}`, enabled: false },
@@ -1189,9 +1198,10 @@ function startProcessMonitor(installation: DiscordInstallation) {
     } catch (error) {
       logger?.error(`Não foi possível verificar se o Discord continua aberto: ${errorMessage(error)}`);
     }
-  // Path-aware detection invokes the native Windows process inspector. Five
-  // seconds keeps status responsive without spawning an inspector every 2 seconds.
-  }, 5_000);
+  // Path-aware detection invokes the native Windows process inspector. Thirty
+  // seconds keeps the status reasonably current while avoiding frequent
+  // PowerShell process creation during long-running sessions.
+  }, 30_000);
   monitorTimer.unref();
 }
 
@@ -1220,14 +1230,69 @@ app.whenReady().then(async () => {
     const currentVersion = app.getVersion();
     logger?.info(`Verificando se o GoLiveBack ${currentVersion} é a release mais recente.`);
     try {
-      const result = await checkProjectUpdate(currentVersion);
-      if (result.updateAvailable) {
-        logger?.info(`Uma atualização está disponível: ${result.latestVersion}. Abrindo a página oficial de releases.`);
-        await shell.openExternal(PROJECT_LATEST_RELEASE_URL);
-      } else {
+      const portable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
+      const result = await checkSecureUpdate(currentVersion, fetch, portable ? "portable" : "setup");
+      if (!result.updateAvailable || !result.artifact) {
         logger?.info(`O GoLiveBack está atualizado na versão ${currentVersion}.`);
+        return { currentVersion, latestVersion: result.latestVersion, updateAvailable: false, action: "current" };
       }
-      return result;
+
+      logger?.info(`Atualização ${result.latestVersion} verificada por assinatura Ed25519 e disponível para download.`);
+      const confirmationOptions = {
+        type: "info" as const,
+        title: "Atualização segura disponível",
+        message: `GoLiveBack ${result.latestVersion} está disponível.`,
+        detail: portable
+          ? "O arquivo portátil será baixado, verificado e mostrado na pasta para você substituir a versão atual."
+          : "O instalador será baixado, verificado e poderá ser iniciado sem abrir o navegador.",
+        buttons: ["Baixar atualização", "Agora não"],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true
+      };
+      const confirmation = mainWindow
+        ? await dialog.showMessageBox(mainWindow, confirmationOptions)
+        : await dialog.showMessageBox(confirmationOptions);
+      if (confirmation.response !== 0) {
+        return { currentVersion, latestVersion: result.latestVersion, updateAvailable: true, action: "cancelled" };
+      }
+
+      const updateDirectory = path.join(app.getPath("temp"), "GoLiveBack", "updates", result.latestVersion);
+      logger?.info(`Baixando ${result.artifact.file}; o arquivo será aceito somente após conferir tamanho e SHA-256 assinado.`);
+      const downloadedPath = await downloadVerifiedUpdate(result.artifact, updateDirectory);
+      logger?.info(`Atualização verificada e salva temporariamente como ${path.basename(downloadedPath)}.`);
+
+      if (portable || !app.isPackaged) {
+        shell.showItemInFolder(downloadedPath);
+        return { currentVersion, latestVersion: result.latestVersion, updateAvailable: true, action: "downloaded" };
+      }
+
+      const installOptions = {
+        type: "question" as const,
+        title: "Atualização pronta",
+        message: `Instalar GoLiveBack ${result.latestVersion} agora?`,
+        detail: "A rota será encerrada com segurança antes de abrir o instalador.",
+        buttons: ["Instalar agora", "Mostrar na pasta"],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true
+      };
+      const installChoice = mainWindow
+        ? await dialog.showMessageBox(mainWindow, installOptions)
+        : await dialog.showMessageBox(installOptions);
+      if (installChoice.response !== 0) {
+        shell.showItemInFolder(downloadedPath);
+        return { currentVersion, latestVersion: result.latestVersion, updateAvailable: true, action: "downloaded" };
+      }
+
+      const installer = spawn(downloadedPath, [], { detached: true, stdio: "ignore", windowsHide: false });
+      await new Promise<void>((resolve, reject) => {
+        installer.once("spawn", resolve);
+        installer.once("error", reject);
+      });
+      installer.unref();
+      void requestApplicationQuit("application");
+      return { currentVersion, latestVersion: result.latestVersion, updateAvailable: true, action: "installing" };
     } catch (error) {
       logger?.error(`A verificação de atualização falhou: ${errorMessage(error)}`);
       throw error;

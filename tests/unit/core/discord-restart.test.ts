@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DiscordRestartGate } from "./discord-restart.js";
+import { DiscordRestartGate } from "../../../src/core/discord-restart.js";
 
 test("restart gate rejects concurrent attempts and enforces cooldown", () => {
   let now = 1_000;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPacScript, startPacServer } from "./pac.js";
+import { createPacScript, startPacServer } from "../../../src/core/pac.js";
 
 test("PAC routes only Discord gateway hosts", () => {
   const script = createPacScript(32123);

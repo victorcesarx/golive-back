@@ -1,6 +1,6 @@
 # GoLiveBack
 
-[Baixar versão portátil 1.17.1](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Portable-1.17.1-x64.exe) · [Baixar instalador 1.17.1](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Setup-1.17.1-x64.exe)
+[Baixar versão portátil 1.17.2](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Portable-1.17.2-x64.exe) · [Baixar instalador 1.17.2](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Setup-1.17.2-x64.exe)
 
 Aplicativo Windows independente que devolve o Go Live e a câmera no Discord Desktop criando uma rota externa apenas para os WebSockets de gateway. Não instala Vencord, não injeta JavaScript e não modifica os arquivos internos do Discord.
 
@@ -33,9 +33,9 @@ Quando a rota estiver pronta, o botão principal mostra **GoLive ativo**. Clique
 - **Selecionar executável:** escolhe manualmente outra instalação compatível do Discord.
 - **Usar proxy:** valida e aplica uma proxy SOCKS5 personalizada sem derrubar antecipadamente a rota atual.
 - **Abrir log:** abre a pasta que contém `goliveback.log`.
-- **Verificar atualização:** compara a versão instalada com a release mais recente do GitHub. Se existir uma versão nova, abre a página da release no navegador.
+- **Verificar atualização:** compara a versão instalada com a release mais recente, valida o manifesto Ed25519 e baixa o instalador ou portátil sem abrir o navegador.
 
-A verificação de atualização não armazena tokens. Enquanto o repositório estiver privado, o GitHub pode impedir consultas não autenticadas; nesse caso, o motivo aparece no diagnóstico do aplicativo.
+A verificação de atualização não armazena tokens. A release precisa estar publicamente acessível para que os computadores dos usuários possam consultar e baixar seus assets sem credenciais.
 
 ## Como funciona
 
@@ -82,11 +82,38 @@ Requisitos: Node.js 24 e pnpm 10.
 ```powershell
 pnpm install --frozen-lockfile
 pnpm test
-pnpm start
+pnpm dev
 pnpm package:win
 ```
 
 As verificações automatizadas cobrem roteamento, PAC, Tor, Discord, preferências, encerramento coordenado, segurança da interface e consulta de atualizações. A esteira de release oficial exige assinatura Authenticode válida antes da publicação.
+
+A organização do projeto separa cada responsabilidade:
+
+- `src/`: processo principal e regras de negócio da aplicação;
+- `public/`: interface e preload carregados pelo Electron;
+- `tests/unit/`: testes unitários TypeScript, espelhando os módulos de `src/`;
+- `tests/smoke/`: verificações de integração da interface em execução;
+- `scripts/`: automações de desenvolvimento, segurança, build e release;
+- `assets/` e `vendor/`: recursos próprios e dependências binárias distribuídas.
+
+O comando `pnpm test` compila a aplicação em `dist/`, compila os testes separadamente em `.tmp/test-dist/` e executa apenas essa suíte temporária. `pnpm dev` recompila e reinicia o Electron quando `src/` muda, mantendo o recarregamento da interface em `public/`.
+
+### Releases pessoais e atualizações
+
+A confiança das atualizações é independente do Authenticode. O aplicativo contém apenas a chave pública Ed25519 de `assets/update-public.pem`; a chave privada fica fora do repositório em `%USERPROFILE%\.goliveback-signing\update-private.pem`.
+
+Para criar uma release pessoal:
+
+```powershell
+pnpm release:personal
+```
+
+O comando executa as verificações de segurança, gera instalador e portátil, cria `release-manifest.json`, assina-o como `release-manifest.sig` e verifica novamente todos os hashes. Publique todos os arquivos de `release/personal/` como assets de uma release pública cuja tag corresponda à versão do `package.json` — por exemplo, `v1.18.0`.
+
+Faça backup privado da pasta `%USERPROFILE%\.goliveback-signing`. Nunca publique `update-private.pem`: quem possuir essa chave poderá produzir atualizações aceitas pelo aplicativo. Se a chave for perdida, versões já distribuídas não confiarão automaticamente em uma chave substituta.
+
+No instalador NSIS, uma atualização validada pode ser iniciada diretamente pelo aplicativo. Na versão portátil, o novo executável é baixado e mostrado na pasta para substituição manual após o fechamento, evitando modificar um processo que ainda está em execução.
 
 ## Componentes de terceiros
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { redactSensitiveText } from "./sensitive-data.js";
+import { redactSensitiveText } from "../../../src/core/sensitive-data.js";
 
 test("redacts complete SOCKS5 URLs including the server address", () => {
   const result = redactSensitiveText("using socks5://alice:p%40ss@proxy.example:1080 now");

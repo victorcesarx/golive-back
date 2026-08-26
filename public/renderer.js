@@ -26,6 +26,7 @@ const close = document.querySelector("#close");
 const help = document.querySelector("#help");
 const aboutModal = document.querySelector("#about-modal");
 const closeAbout = document.querySelector("#close-about");
+const usageReminder = document.querySelector("#usage-reminder");
 const controls = [activate, restart, openLog, checkUpdate, showDiagnostics, copyOutput, discordInstallation, chooseDiscord, protectedButton, startWithWindows, launchDirect];
 const badgeByPhase = { idle: "INATIVO", validating: "VALIDANDO", ready: "PRONTO", "discord-running": "PROTEGIDO", restarting: "REINICIANDO", recovering: "RECUPERANDO", error: "ATENÇÃO" };
 const detailByPhase = {
@@ -205,6 +206,7 @@ restart.addEventListener("click", async () => {
   launchDirect.hidden = true;
   try {
     await window.gatewayRoute.restartDiscord();
+    usageReminder.hidden = false;
     showOutput("Discord reiniciado e confirmado como estável com a rota ativa.", "success");
   } catch (error) {
     advancedSettings.open = true;
@@ -279,8 +281,13 @@ checkUpdate.addEventListener("click", async () => {
   try {
     const result = await window.gatewayRoute.checkUpdate();
     if (result.updateAvailable) {
-      showOutput(`Nova versão disponível.\n\nInstalada: ${result.currentVersion}\nMais recente: ${result.latestVersion}\n\nA página da release foi aberta no navegador.`, "success");
-      checkUpdate.textContent = "Atualização disponível";
+      const updateMessages = {
+        cancelled: "O download foi adiado.",
+        downloaded: "O arquivo foi baixado, validado e mostrado na pasta. Na versão portátil, substitua o executável atual depois de fechar o aplicativo.",
+        installing: "O instalador validado foi iniciado. O aplicativo será encerrado com segurança."
+      };
+      showOutput(`Nova versão disponível.\n\nInstalada: ${result.currentVersion}\nMais recente: ${result.latestVersion}\n\n${updateMessages[result.action] ?? "A atualização está disponível."}`, "success");
+      checkUpdate.textContent = result.action === "installing" ? "Instalando atualização" : "Atualização disponível";
     } else {
       showOutput(`O GoLiveBack está atualizado.\n\nVersão instalada: ${result.currentVersion}`, "success");
       checkUpdate.textContent = "Versão atualizada";
@@ -328,6 +335,10 @@ help.addEventListener("click", () => aboutModal.showModal());
 closeAbout.addEventListener("click", () => aboutModal.close());
 aboutModal.addEventListener("click", event => {
   if (event.target === aboutModal) aboutModal.close();
+});
+usageReminder.addEventListener("click", () => {
+  usageReminder.setAttribute("aria-expanded", String(usageReminder.getAttribute("aria-expanded") !== "true"));
+  window.requestAnimationFrame(updateScrollIndicator);
 });
 advancedSettings.addEventListener("toggle", () => {
   if (advancedSettings.open && !cachedDiscordDetection && !discordDetectionPromise) void refreshDiscord(false);
