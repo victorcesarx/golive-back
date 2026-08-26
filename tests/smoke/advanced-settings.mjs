@@ -95,6 +95,7 @@ const evaluation = await call("Runtime.evaluate", {
       minimizeDisabled: document.querySelector("#minimize").disabled,
       closeDisabled: document.querySelector("#close").disabled,
       checkUpdateDisabled: document.querySelector("#check-update").disabled,
+      appVersion: document.querySelector("#app-version").textContent,
       secondaryActionIds: [...document.querySelectorAll(".secondary-actions button")].map(button => button.id),
       discordOptions: document.querySelector("#discord-installation").options.length,
       initialFooterPosition: window.__initialFooterState.position,
@@ -117,7 +118,8 @@ if (
   || result.minimizeDisabled
   || result.closeDisabled
   || result.checkUpdateDisabled
-  || JSON.stringify(result.secondaryActionIds) !== JSON.stringify(["open-log", "check-update"])
+  || JSON.stringify(result.secondaryActionIds) !== JSON.stringify(["open-log", "show-diagnostics", "check-update"])
+  || !/^v\d+\.\d+\.\d+$/.test(result.appVersion)
   || result.initialFooterPosition !== "fixed"
   || Math.abs(result.initialFooterBottomGap) > 0.5
   || result.advancedFooterPosition !== "static"

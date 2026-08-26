@@ -119,8 +119,8 @@
       .reveal-secret .eye-off, .reveal-secret.is-visible .eye-on { display: none; }
       .reveal-secret.is-visible .eye-off { display: block; }
       .proxy-warning { margin: 7px 0 0; color: var(--warning); font-size: 10px; line-height: 14px; }
-      .secondary-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-      .secondary-actions button { min-height: 34px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: var(--bg-elevated); cursor: pointer; font-size: 12px; font-weight: 600; }
+      .secondary-actions { display: flex; gap: 8px; width: 100%; margin-top: 12px; }
+      .secondary-actions button { min-width: 0; min-height: 34px; flex: 1 1 auto; padding: 0 10px; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); background: var(--bg-elevated); cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; }
       .secondary-actions button:hover { background: var(--bg-hover); }
       .recovery-action { width: 100%; min-height: 34px; margin-top: 8px; border: 1px solid var(--warning-state-border); border-radius: var(--radius-sm); color: var(--warning); background: var(--warning-surface); cursor: pointer; font-size: 12px; font-weight: 700; }
       .recovery-action:hover { border-color: var(--warning); }
@@ -138,8 +138,10 @@
       #scroll-indicator[hidden] { display: none; }
       #scroll-indicator:hover { background: var(--primary-600); }
       #scroll-indicator svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
-      .footnote { position: fixed; z-index: 15; right: 0; bottom: 0; left: 0; min-height: var(--footer-height); display: flex; align-items: center; justify-content: center; margin: 0; padding: 8px 26px 10px; border-top: 1px solid var(--border-subtle); background: var(--bg-canvas); box-shadow: 0 -10px 24px rgb(0 0 0 / 12%); }
-      .footnote p { width: 100%; max-width: 340px; margin: 0; color: var(--text-muted); font-size: 11px; line-height: 16px; text-align: center; }
+      .footnote { position: fixed; z-index: 15; right: 0; bottom: 0; left: 0; min-height: var(--footer-height); display: grid; grid-template-columns: 46px minmax(0, 1fr) 46px; align-items: center; gap: 6px; margin: 0; padding: 8px 10px 10px; border-top: 1px solid var(--border-subtle); background: var(--bg-canvas); box-shadow: 0 -10px 24px rgb(0 0 0 / 12%); }
+      .footnote p { min-width: 0; width: 100%; max-width: 340px; margin: 0 auto; color: var(--text-muted); font-size: 11px; line-height: 16px; text-align: center; }
+      .app-version { align-self: end; color: var(--text-disabled); font-size: 9px; line-height: 12px; white-space: nowrap; }
+      .footnote::after { width: 46px; content: ""; }
       body:has(details[open]) { padding-bottom: 0; }
       body:has(details[open]) .footnote { position: static; min-height: var(--footer-height); box-shadow: none; }
       body:has(details[open]) #scroll-indicator { bottom: 10px; }
@@ -229,7 +231,7 @@
           <div class="secondary-actions">
             <button id="open-log" type="button">Abrir log</button>
             <button id="show-diagnostics" type="button">Diagnóstico</button>
-            <button id="check-update" type="button" aria-live="polite">Verificar atualização</button>
+            <button id="check-update" type="button" aria-live="polite">Verificar atualizações</button>
           </div>
           <div class="output-shell">
             <pre id="output">Aguardando diagnóstico…</pre>
@@ -241,7 +243,7 @@
         </div>
       </details>
     </main>
-    <footer class="footnote"><p>Ative a rota, abra o Discord, se estiver aberto use “Reiniciar Discord” para aplicar a proteção. Fechar esta janela mantém o GoLiveBack na bandeja do sistema.</p></footer>
+    <footer class="footnote"><span id="app-version" class="app-version" aria-label="Versão do aplicativo"></span><p>Ative a rota, abra o Discord, se estiver aberto use “Reiniciar Discord” para aplicar a proteção. Fechar esta janela mantém o GoLiveBack na bandeja do sistema.</p></footer>
     <button id="scroll-indicator" type="button" aria-label="Mais conteúdo abaixo" title="Mais conteúdo abaixo" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
     </button>

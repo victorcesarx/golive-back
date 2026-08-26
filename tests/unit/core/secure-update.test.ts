@@ -79,12 +79,16 @@ test("downloads atomically and rejects contents outside the signed SHA-256", asy
     downloadUrl: "https://downloads.example/update.exe"
   };
   try {
+    const progress: number[] = [];
     const downloaded = await downloadVerifiedUpdate(
       artifact,
       directory,
-      async () => new Response(fixture.artifactContents, { headers: { "content-length": String(fixture.artifactContents.length) } })
+      async () => new Response(fixture.artifactContents, { headers: { "content-length": String(fixture.artifactContents.length) } }),
+      value => progress.push(value.percent)
     );
     assert.deepEqual(await readFile(downloaded), fixture.artifactContents);
+    assert.equal(progress[0], 0);
+    assert.equal(progress.at(-1), 100);
 
     await assert.rejects(
       downloadVerifiedUpdate(

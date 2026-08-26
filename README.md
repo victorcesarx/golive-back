@@ -1,6 +1,6 @@
 # GoLiveBack
 
-[Baixar versão portátil 1.17.2](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Portable-1.17.2-x64.exe) · [Baixar instalador 1.17.2](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Setup-1.17.2-x64.exe)
+[Baixar versão portátil 1.17.3](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Portable-1.17.3-x64.exe) · [Baixar instalador 1.17.3](https://github.com/victorcesarx/golive-back/releases/latest/download/GoLiveBack-Setup-1.17.3-x64.exe)
 
 Aplicativo Windows independente que devolve o Go Live e a câmera no Discord Desktop criando uma rota externa apenas para os WebSockets de gateway. Não instala Vencord, não injeta JavaScript e não modifica os arquivos internos do Discord.
 
@@ -114,6 +114,14 @@ O comando executa as verificações de segurança, gera instalador e portátil, 
 Faça backup privado da pasta `%USERPROFILE%\.goliveback-signing`. Nunca publique `update-private.pem`: quem possuir essa chave poderá produzir atualizações aceitas pelo aplicativo. Se a chave for perdida, versões já distribuídas não confiarão automaticamente em uma chave substituta.
 
 No instalador NSIS, uma atualização validada pode ser iniciada diretamente pelo aplicativo. Na versão portátil, o novo executável é baixado e mostrado na pasta para substituição manual após o fechamento, evitando modificar um processo que ainda está em execução.
+
+Para testar o fluxo completo contra a release pública sem alterar a versão real do projeto, execute:
+
+```powershell
+pnpm test:update-flow
+```
+
+O comando cria em `.tmp/update-flow/` uma build empacotada com o mesmo código atual, mas simulando a versão patch anterior e usando um perfil isolado da instalação normal. Use **Verificar atualizações** nessa janela: a disponibilidade, o progresso do download e a validação aparecem na área de saída do próprio aplicativo; ao final, o botão muda para **Instalar**. O diretório é temporário, ignorado pelo Git e recriado a cada teste.
 
 ## Componentes de terceiros
 

@@ -37,6 +37,12 @@ export interface SecureUpdateCheckResult {
   artifact?: UpdateArtifact;
 }
 
+export interface UpdateDownloadProgress {
+  receivedBytes: number;
+  totalBytes: number;
+  percent: number;
+}
+
 export interface VerifiedReleaseManifest {
   application: "GoLiveBack";
   version: string;
@@ -186,7 +192,8 @@ export async function checkSecureUpdate(
 export async function downloadVerifiedUpdate(
   artifact: UpdateArtifact,
   destinationDirectory: string,
-  fetchImplementation: typeof fetch = fetch
+  fetchImplementation: typeof fetch = fetch,
+  onProgress?: (progress: UpdateDownloadProgress) => void
 ) {
   safeHttpsUrl(artifact.downloadUrl);
   if (path.basename(artifact.file) !== artifact.file) throw new Error("O nome do instalador de atualização é inseguro.");
@@ -212,6 +219,7 @@ export async function downloadVerifiedUpdate(
     const hash = createHash("sha256");
     const reader = response.body.getReader();
     let received = 0;
+    onProgress?.({ receivedBytes: 0, totalBytes: artifact.bytes, percent: 0 });
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -224,6 +232,11 @@ export async function downloadVerifiedUpdate(
         const result = await handle.write(chunk, offset, chunk.length - offset, received - chunk.length + offset);
         offset += result.bytesWritten;
       }
+      onProgress?.({
+        receivedBytes: received,
+        totalBytes: artifact.bytes,
+        percent: Math.min(100, (received / artifact.bytes) * 100)
+      });
     }
     await handle.sync();
     await handle.close();

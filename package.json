@@ -1,6 +1,6 @@
 {
   "name": "goliveback",
-  "version": "1.17.2",
+  "version": "1.17.3",
   "private": true,
   "packageManager": "pnpm@10.34.5",
   "type": "module",
@@ -20,6 +20,7 @@
     "dev:once": "pnpm build && electron .",
     "start": "electron .",
     "test": "pnpm build && tsc --project tsconfig.test.json && node --test .tmp/test-dist/tests/unit/**/*.test.js",
+    "test:update-flow": "node scripts/test-update-flow.mjs",
     "verify:tor": "node scripts/verify-tor-bundle.mjs",
     "security:secrets": "node scripts/scan-secrets.mjs",
     "security:check": "pnpm test && pnpm audit --audit-level high && pnpm verify:tor && pnpm security:secrets",

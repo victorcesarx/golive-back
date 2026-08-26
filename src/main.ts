@@ -26,7 +26,7 @@ import { resolveValidatedStartupCommand } from "./core/startup.js";
 import { redactSensitiveText } from "./core/sensitive-data.js";
 import { ShutdownCoordinator, type ShutdownReason } from "./core/shutdown-coordinator.js";
 import { inspectWindowsExecutable } from "./core/windows-executable.js";
-import { checkSecureUpdate, downloadVerifiedUpdate } from "./core/secure-update.js";
+import { checkSecureUpdate, downloadVerifiedUpdate, type UpdateArtifact } from "./core/secure-update.js";
 import {
   isTrustedIpcSender,
   isTrustedRendererUrl,
@@ -68,6 +68,15 @@ let allowQuitAfterCleanup = false;
 let quitRequestPromise: Promise<void> | undefined;
 let devUiWatcher: FSWatcher | undefined;
 let devUiReloadTimer: NodeJS.Timeout | undefined;
+interface PendingUpdate {
+  currentVersion: string;
+  latestVersion: string;
+  artifact: UpdateArtifact;
+  portable: boolean;
+  downloadedPath: string | undefined;
+}
+let pendingUpdate: PendingUpdate | undefined;
+let updateDownloadInProgress = false;
 const pendingRouteOperations = new Set<Promise<unknown>>();
 const discordRestartGate = new DiscordRestartGate();
 
@@ -1215,6 +1224,7 @@ app.whenReady().then(async () => {
   configureSessionSecurity();
   registerUiProtocol();
   handleTrustedIpc("app:status", () => runtimeStatus);
+  handleTrustedIpc("app:version", () => app.getVersion());
   handleTrustedIpc("diagnostics:get", createDiagnosticReport);
   handleTrustedIpc("output:copy", copyOutputText);
   handleTrustedIpc("app:open-log", async () => {
@@ -1233,68 +1243,82 @@ app.whenReady().then(async () => {
       const portable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
       const result = await checkSecureUpdate(currentVersion, fetch, portable ? "portable" : "setup");
       if (!result.updateAvailable || !result.artifact) {
+        pendingUpdate = undefined;
         logger?.info(`O GoLiveBack está atualizado na versão ${currentVersion}.`);
-        return { currentVersion, latestVersion: result.latestVersion, updateAvailable: false, action: "current" };
+        return { currentVersion, latestVersion: result.latestVersion, updateAvailable: false };
       }
 
       logger?.info(`Atualização ${result.latestVersion} verificada por assinatura Ed25519 e disponível para download.`);
-      const confirmationOptions = {
-        type: "info" as const,
-        title: "Atualização segura disponível",
-        message: `GoLiveBack ${result.latestVersion} está disponível.`,
-        detail: portable
-          ? "O arquivo portátil será baixado, verificado e mostrado na pasta para você substituir a versão atual."
-          : "O instalador será baixado, verificado e poderá ser iniciado sem abrir o navegador.",
-        buttons: ["Baixar atualização", "Agora não"],
-        defaultId: 0,
-        cancelId: 1,
-        noLink: true
+      pendingUpdate = {
+        currentVersion,
+        latestVersion: result.latestVersion,
+        artifact: result.artifact,
+        portable,
+        downloadedPath: undefined
       };
-      const confirmation = mainWindow
-        ? await dialog.showMessageBox(mainWindow, confirmationOptions)
-        : await dialog.showMessageBox(confirmationOptions);
-      if (confirmation.response !== 0) {
-        return { currentVersion, latestVersion: result.latestVersion, updateAvailable: true, action: "cancelled" };
-      }
+      return { currentVersion, latestVersion: result.latestVersion, updateAvailable: true, portable };
+    } catch (error) {
+      pendingUpdate = undefined;
+      logger?.error(`A verificação de atualização falhou: ${errorMessage(error)}`);
+      throw error;
+    }
+  });
+  handleTrustedIpc("app:download-update", async () => {
+    const update = pendingUpdate;
+    if (!update) throw new Error("Verifique se existe uma atualização antes de iniciar o download.");
+    if (update.downloadedPath) {
+      return { latestVersion: update.latestVersion, portable: update.portable, action: "ready" };
+    }
+    if (updateDownloadInProgress) throw new Error("O download da atualização já está em andamento.");
 
-      const updateDirectory = path.join(app.getPath("temp"), "GoLiveBack", "updates", result.latestVersion);
-      logger?.info(`Baixando ${result.artifact.file}; o arquivo será aceito somente após conferir tamanho e SHA-256 assinado.`);
-      const downloadedPath = await downloadVerifiedUpdate(result.artifact, updateDirectory);
+    updateDownloadInProgress = true;
+    try {
+      const updateDirectory = path.join(app.getPath("temp"), "GoLiveBack", "updates", update.latestVersion);
+      logger?.info(`Baixando ${update.artifact.file}; o arquivo será aceito somente após conferir tamanho e SHA-256 assinado.`);
+      let lastPercent = -1;
+      const downloadedPath = await downloadVerifiedUpdate(update.artifact, updateDirectory, fetch, progress => {
+        const percent = Math.floor(progress.percent);
+        if (percent === lastPercent) return;
+        lastPercent = percent;
+        mainWindow?.webContents.send("update:progress", { phase: "downloading", ...progress, percent });
+      });
+      if (pendingUpdate !== update) throw new Error("A atualização disponível mudou durante o download.");
+      update.downloadedPath = downloadedPath;
+      mainWindow?.webContents.send("update:progress", {
+        phase: "verified",
+        receivedBytes: update.artifact.bytes,
+        totalBytes: update.artifact.bytes,
+        percent: 100
+      });
       logger?.info(`Atualização verificada e salva temporariamente como ${path.basename(downloadedPath)}.`);
+      return { latestVersion: update.latestVersion, portable: update.portable, action: "ready" };
+    } catch (error) {
+      logger?.error(`O download da atualização falhou: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      updateDownloadInProgress = false;
+    }
+  });
+  handleTrustedIpc("app:install-update", async () => {
+    const update = pendingUpdate;
+    if (!update?.downloadedPath) throw new Error("Baixe e valide a atualização antes de instalar.");
 
-      if (portable || !app.isPackaged) {
-        shell.showItemInFolder(downloadedPath);
-        return { currentVersion, latestVersion: result.latestVersion, updateAvailable: true, action: "downloaded" };
-      }
+    if (update.portable || !app.isPackaged) {
+      shell.showItemInFolder(update.downloadedPath);
+      return { latestVersion: update.latestVersion, action: "shown" };
+    }
 
-      const installOptions = {
-        type: "question" as const,
-        title: "Atualização pronta",
-        message: `Instalar GoLiveBack ${result.latestVersion} agora?`,
-        detail: "A rota será encerrada com segurança antes de abrir o instalador.",
-        buttons: ["Instalar agora", "Mostrar na pasta"],
-        defaultId: 0,
-        cancelId: 1,
-        noLink: true
-      };
-      const installChoice = mainWindow
-        ? await dialog.showMessageBox(mainWindow, installOptions)
-        : await dialog.showMessageBox(installOptions);
-      if (installChoice.response !== 0) {
-        shell.showItemInFolder(downloadedPath);
-        return { currentVersion, latestVersion: result.latestVersion, updateAvailable: true, action: "downloaded" };
-      }
-
-      const installer = spawn(downloadedPath, [], { detached: true, stdio: "ignore", windowsHide: false });
+    try {
+      const installer = spawn(update.downloadedPath, [], { detached: true, stdio: "ignore", windowsHide: false });
       await new Promise<void>((resolve, reject) => {
         installer.once("spawn", resolve);
         installer.once("error", reject);
       });
       installer.unref();
       void requestApplicationQuit("application");
-      return { currentVersion, latestVersion: result.latestVersion, updateAvailable: true, action: "installing" };
+      return { latestVersion: update.latestVersion, action: "installing" };
     } catch (error) {
-      logger?.error(`A verificação de atualização falhou: ${errorMessage(error)}`);
+      logger?.error(`Não foi possível iniciar o instalador da atualização: ${errorMessage(error)}`);
       throw error;
     }
   });

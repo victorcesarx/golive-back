@@ -9,10 +9,13 @@ contextBridge.exposeInMainWorld("gatewayRoute", Object.freeze({
   restartDiscord: () => ipcRenderer.invoke("discord:restart"),
   launchDiscordDirect: () => ipcRenderer.invoke("discord:launch-direct"),
   getStatus: () => ipcRenderer.invoke("app:status"),
+  getVersion: () => ipcRenderer.invoke("app:version"),
   getDiagnostics: () => ipcRenderer.invoke("diagnostics:get"),
   copyOutput: text => ipcRenderer.invoke("output:copy", text),
   openLog: () => ipcRenderer.invoke("app:open-log"),
   checkUpdate: () => ipcRenderer.invoke("app:check-update"),
+  downloadUpdate: () => ipcRenderer.invoke("app:download-update"),
+  installUpdate: () => ipcRenderer.invoke("app:install-update"),
   getPreferences: () => ipcRenderer.invoke("preferences:get"),
   setStartWithWindows: enabled => ipcRenderer.invoke("preferences:set-start-with-windows", enabled),
   activateGoLive: () => ipcRenderer.invoke("app:activate-golive"),
@@ -22,6 +25,11 @@ contextBridge.exposeInMainWorld("gatewayRoute", Object.freeze({
     const listener = (_event, status) => callback(status);
     ipcRenderer.on("status:update", listener);
     return () => ipcRenderer.removeListener("status:update", listener);
+  },
+  onUpdateProgress: callback => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on("update:progress", listener);
+    return () => ipcRenderer.removeListener("update:progress", listener);
   },
   onClearSensitiveFields: callback => {
     const listener = () => callback();

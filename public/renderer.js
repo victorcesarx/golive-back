@@ -27,6 +27,7 @@ const help = document.querySelector("#help");
 const aboutModal = document.querySelector("#about-modal");
 const closeAbout = document.querySelector("#close-about");
 const usageReminder = document.querySelector("#usage-reminder");
+const appVersion = document.querySelector("#app-version");
 const controls = [activate, restart, openLog, checkUpdate, showDiagnostics, copyOutput, discordInstallation, chooseDiscord, protectedButton, startWithWindows, launchDirect];
 const badgeByPhase = { idle: "INATIVO", validating: "VALIDANDO", ready: "PRONTO", "discord-running": "PROTEGIDO", restarting: "REINICIANDO", recovering: "RECUPERANDO", error: "ATENÇÃO" };
 const detailByPhase = {
@@ -42,6 +43,20 @@ let discordDetectionPromise = null;
 let discordDataRevision = 0;
 let checkingUpdate = false;
 let updateFeedbackTimer;
+let updateAction = "check";
+let availableUpdate;
+
+function formatMegabytes(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+}
+
+function renderUpdateProgress(progress) {
+  if (!availableUpdate || progress.phase !== "downloading") return;
+  checkUpdate.textContent = `Baixando… ${progress.percent}%`;
+  showOutput(
+    `Baixando atualização…\n\n${progress.percent}% · ${formatMegabytes(progress.receivedBytes)} de ${formatMegabytes(progress.totalBytes)}`
+  );
+}
 
 function installationLabel(installation) {
   if (installation.channel === "stable") return "Discord";
@@ -276,31 +291,53 @@ copyOutput.addEventListener("click", async () => {
 checkUpdate.addEventListener("click", async () => {
   window.clearTimeout(updateFeedbackTimer);
   checkingUpdate = true;
-  checkUpdate.textContent = "Verificando…";
   applyControlState();
   try {
-    const result = await window.gatewayRoute.checkUpdate();
-    if (result.updateAvailable) {
-      const updateMessages = {
-        cancelled: "O download foi adiado.",
-        downloaded: "O arquivo foi baixado, validado e mostrado na pasta. Na versão portátil, substitua o executável atual depois de fechar o aplicativo.",
-        installing: "O instalador validado foi iniciado. O aplicativo será encerrado com segurança."
-      };
-      showOutput(`Nova versão disponível.\n\nInstalada: ${result.currentVersion}\nMais recente: ${result.latestVersion}\n\n${updateMessages[result.action] ?? "A atualização está disponível."}`, "success");
-      checkUpdate.textContent = result.action === "installing" ? "Instalando atualização" : "Atualização disponível";
+    if (updateAction === "check") {
+      checkUpdate.textContent = "Verificando…";
+      const result = await window.gatewayRoute.checkUpdate();
+      if (result.updateAvailable) {
+        availableUpdate = result;
+        updateAction = "download";
+        showOutput(`Atualização disponível.\n\nVersão atual: ${result.currentVersion}\nNova versão: ${result.latestVersion}`, "success");
+        checkUpdate.textContent = "Baixar";
+      } else {
+        availableUpdate = undefined;
+        showOutput(`O GoLiveBack está atualizado.\n\nVersão instalada: ${result.currentVersion}`, "success");
+        checkUpdate.textContent = "Versão atualizada";
+        updateFeedbackTimer = window.setTimeout(() => { checkUpdate.textContent = "Verificar atualizações"; }, 5_000);
+      }
+    } else if (updateAction === "download") {
+      checkUpdate.textContent = "Preparando…";
+      const result = await window.gatewayRoute.downloadUpdate();
+      updateAction = "install";
+      showOutput(`Atualização baixada e verificada.\n\nGoLiveBack ${result.latestVersion} está pronto para ${result.portable ? "substituição" : "instalação"}.`, "success");
+      checkUpdate.textContent = result.portable ? "Mostrar arquivo" : "Instalar";
     } else {
-      showOutput(`O GoLiveBack está atualizado.\n\nVersão instalada: ${result.currentVersion}`, "success");
-      checkUpdate.textContent = "Versão atualizada";
+      checkUpdate.textContent = availableUpdate?.portable ? "Abrindo pasta…" : "Abrindo instalador…";
+      const result = await window.gatewayRoute.installUpdate();
+      if (result.action === "shown") {
+        showOutput(
+          `GoLiveBack ${result.latestVersion} foi mostrado na pasta.\n\nFeche o aplicativo antes de substituir o executável portátil atual.`,
+          "success"
+        );
+        updateAction = "check";
+        availableUpdate = undefined;
+        checkUpdate.textContent = "Verificar atualizações";
+      } else {
+        showOutput("O instalador validado foi iniciado. O aplicativo será encerrado com segurança.", "success");
+        checkUpdate.textContent = "Instalando…";
+      }
     }
   } catch (error) {
-    showOutput(`Não foi possível verificar atualizações.\n\n${readableError(error)}`, "error");
-    checkUpdate.textContent = "Falha ao verificar";
+    const operation = updateAction === "check" ? "verificar atualizações"
+      : updateAction === "download" ? "baixar a atualização"
+        : "abrir o instalador";
+    showOutput(`Não foi possível ${operation}.\n\n${readableError(error)}`, "error");
+    checkUpdate.textContent = updateAction === "check" ? "Verificar atualizações" : "Tentar novamente";
   } finally {
     checkingUpdate = false;
     applyControlState();
-    updateFeedbackTimer = window.setTimeout(() => {
-      checkUpdate.textContent = "Verificar atualização";
-    }, 5_000);
   }
 });
 chooseDiscord.addEventListener("click", async () => {
@@ -351,8 +388,10 @@ new ResizeObserver(updateScrollIndicator).observe(document.body);
 
 document.documentElement.dataset.theme = localStorage.getItem("goliveback-theme") === "light" ? "light" : "dark";
 window.gatewayRoute.onStatus(renderStatus);
+window.gatewayRoute.onUpdateProgress(renderUpdateProgress);
 window.gatewayRoute.onClearSensitiveFields(clearProxyField);
 window.gatewayRoute.getStatus().then(renderStatus);
+window.gatewayRoute.getVersion().then(version => { appVersion.textContent = `v${version}`; });
 window.gatewayRoute.getPreferences().then(value => { startWithWindows.checked = value.startWithWindows; });
 void refreshDiscord(false);
 updateScrollIndicator();
