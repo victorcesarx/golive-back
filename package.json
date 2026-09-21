@@ -42,7 +42,7 @@
     "@types/node": "^24.0.0",
     "electron": "43.4.1",
     "electron-builder": "^26.0.0",
-    "typescript": "^5.9.0"
+    "typescript": "^7.0.2"
   },
   "build": {
     "appId": "app.goliveback.desktop",
